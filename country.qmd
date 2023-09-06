@@ -1,9 +1,10 @@
 ---
-title: "My Document"
+echo: false
+code-fold: true
+monofont: Fira Code Light
 execute:
-  code-fold: true
-  echo: false
   warning: false
+  code-fold: true
 ---
 
 # Country
@@ -34,6 +35,8 @@ n_countries_total <- medium_country_raw$country |> unique() |> length()
 The source file contains data on `r n_countries_total` in total and e.g. looks like this for Croatia
 
 ```{r}
+#| label: show-example-raw-data
+#| echo: true
 medium_country_raw |> 
   filter(country == "Croatia") |> 
   arrange(desc(revenue)) |> 
@@ -43,12 +46,7 @@ medium_country_raw |>
 The data is on country / medium level so I would like to collapse it down to just the country level grouping first and compute some additional high-level metrics.
 
 ```{r}
-medium_country_raw |> colnames()
-```
-
-```{r}
 #| label: aggregate-to-country-level
-#| code-fold: true
 #| echo: true
 by_country <- 
   medium_country_raw |> 
@@ -74,3 +72,177 @@ by_country <-
 
 by_country |> filter(country == "Croatia")
 ```
+
+Are there countries with very very low volume of transactions or users ?
+
+```{r}
+#| label: important-metrics-quantiles
+#| echo: true
+by_country |> 
+  select(users, transactions, revenue) |> 
+  map(quantile, probs = seq(0, 1, 0.05))
+```
+
+-   about 15% of the countries have less than 500 users - which seems quite low for the whole of 2022
+-   setting \~ 20,000 as limit for revenue would cut off the lower 20th percentile of countries - which seems also good (perhaps even too low given that the upper percentiles are in 100,000s of euros)
+
+Based on this quick checks I am inclined to set a very simple rule `revenue > 20,000` . I can go back to revise this later if needed - as well as look more into the lower revenue countries to see if there is something to be said for them separately.
+
+The removed countries seem to be indeed small countries.
+
+```{r}
+#| label: show-low-revenue-countries
+#| echo: true
+by_country |> filter(revenue < 20000)
+```
+
+I will start with the following simple rule - either revenue more than €20,000 or users or transactions volume b bigger than 500 (i will come back to adjust these in case there is still lots of noise or conversely i am missing some granularity)
+
+```{r}
+#| label: remove-low-revenue-countries
+#| echo: true
+#| code-fold: false
+by_country <- by_country |> 
+  filter(
+    (revenue > 20000) | (users > 500) | (transactions > 500)
+  )
+```
+
+### Which countries "drive" the most ?
+
+Which countries drive the most users ?
+
+```{r}
+#| label: most-users-plot
+#| echo: true
+by_country |> 
+  slice_max(order_by = users, n = 30) |> 
+  mutate(country = fct_reorder(country, users)) |> 
+  ggplot(aes(x = users, y = country)) +
+  geom_col() +
+  scale_x_continuous(labels = comma_format(), expand = c(0, 0.3)) +
+  labs(
+    title = "Which countries drive the most users ?",
+    x = "# Users",
+    y = NULL
+  ) +
+  theme_minimal()
+```
+
+It seems that it is similar for new users.
+
+```{r}
+#| label: most-new-users-plot
+#| echo: true
+by_country |> 
+  slice_max(order_by = new_users, n = 30) |> 
+  mutate(country = fct_reorder(country, new_users)) |> 
+  ggplot(aes(x = new_users, y = country)) +
+  geom_col() +
+  scale_x_continuous(labels = comma_format(), expand = c(0, 0.3)) +
+  labs(
+    title = "Which countries drive the most new users ?",
+    x = "# New Users",
+    y = NULL
+  ) +
+  theme_minimal()
+```
+
+And I expect the same picture more or less for revenue
+
+```{r}
+#| label: most-revenue-plot
+#| echo: true
+by_country |> 
+  slice_max(order_by = revenue, n = 30) |> 
+  mutate(country = fct_reorder(country, revenue)) |> 
+  ggplot(aes(x = revenue, y = country)) +
+  geom_col() +
+  scale_x_continuous(labels = comma_format(), expand = c(0, 0.3)) +
+  labs(
+    title = "Which countries drive the most revenue ?",
+    x = "€ Revenue",
+    y = NULL
+  ) +
+  theme_minimal()
+```
+
+I noticed something interesting here - Lithuania which was one of the top drivers for (new) users - in terms of revenue dropped significantly. I also have the sense that Australia - which was not even on the top 30 charts in terms of (new) users - jumped straight to the middle when we switched to revenue-view.
+
+I would like to check this bit more in detail by ranking the countries with respect to these metrics and checking a bit the difference in these ranks.
+
+```{r}
+#| label: country-ranks
+#| echo: true
+country_ranks <- by_country |> 
+  mutate(
+    across(
+      c(users, transactions, revenue),
+      ~ dense_rank(desc(.x)),
+      .names = "{col}_rank"
+    )
+  ) |> 
+  select(country, ends_with("rank")) |> 
+  arrange(transactions_rank)
+
+datatable(country_ranks)
+```
+
+I would like to see which countries have either:
+
+-   difference-in-ranks (users minus revenue rank) bigger than 20 or
+-   the ratio of ranks is more than double (users to revenue rank)
+
+```{r}
+#| label: big-diff-in-country-ranks
+#| echo: true
+country_ranks |> 
+  mutate(
+    ranks_diff = abs(users_rank - revenue_rank),
+    users_to_revenue_rank_ratio = users_rank / revenue_rank
+    ) |> 
+  filter(
+    ranks_diff > 20 | users_to_revenue_rank_ratio >= 2
+    ) |> 
+  datatable()
+```
+
+Indeed it seems there are some interesting cases here:
+
+-   Lithuania which is the 2nd biggest driver of users - is the 53rd place when it comes to revenue ?! This means that there are tons of users coming from Lithuania to the client's website but somehow they do not monetise them. This seems odd
+-   In addition to Australia - also Ireland and Japan seem to be 2x higher ranked in terms of revenue compared to rank in terms of users. This means that even though they do not bring the highest volumes of users to the website - they still manage to monetise them quite well - something to be investigated perhaps later (e.g. check their channel mix and see if it is any different than the others)
+
+Once more i want to make sure Lithuania is strange and compare against e.g.
+
+```{r}
+#| label: recheck-lithuania
+by_country |> 
+  filter(country %in% c("Lithuania", "Germany"))
+```
+
+Comparing the ratio of users vs. ratio of revenue for Lithuania vs. Germany
+
+```{r}
+#| label: lithuania-vs-germany
+#| echo: true
+compare_users <- by_country |> 
+  filter(country %in% c("Lithuania", "Germany")) |> 
+  select(country, users) |> 
+  deframe()
+
+compare_revenue <- by_country |> 
+  filter(country %in% c("Lithuania", "Germany")) |> 
+  select(country, revenue) |> 
+  deframe()
+
+c(
+  users = compare_users,
+  users_ratio = compare_users["Lithuania"] / compare_users["Germany"],
+  
+  revenue = compare_revenue,
+  revenue_ratio = compare_revenue["Lithuania"] / compare_revenue["Germany"]
+) |> 
+  prettyNum(scientific = F)
+```
+
+Ok this is confirmation enough i guess - Lithuania is \~140% bigger than Germany in terms of bringing users to the client's website - however it is strangely 6% of the revenue that Germany brings !?

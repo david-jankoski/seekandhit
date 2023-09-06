@@ -1,0 +1,23 @@
+---
+number-sections: false
+---
+
+# Introduction
+
+::: {.callout-note icon="false"}
+## Task overview
+:::
+
+# Data
+
+# Callouts
+
+# Structure of this doc
+
+[Country](country.qmd#Country)
+
+[Country / Medium](country_medium.qmd#Country%20/%20Medium)
+
+[Conversion paths](conversion_paths.qmd#Conversion%20paths)
+
+[Appendix](other_ideas.qmd#Other%20ideas)

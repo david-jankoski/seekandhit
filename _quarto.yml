@@ -1,34 +1,73 @@
+# project:
+#   type: website
+#   output-dir: docs
+#
+# format:
+#   bookup-html:
+#     toc: true
+#     toc-depth: 3
+#
+# execute:
+#   freeze: auto
+
+# book:
+#   title: "SeekandHit Interview Task"
+#   author: "David Jankoski"
+#   date: today
+#   downloads: [pdf, epub]
+#   url: https://david-jankoski.github.io/seekandhit/
+#   repo-url: https://github.com/david-jankoski/seekandhit
+#   repo-actions: edit
+#   search: true
+#   reader-mode: true
+#   sidebar:
+#     style: "docked"
+#   chapters:
+#     - index.qmd
+#     - part: "Content"
+#       chapters:
+#         - summary.qmd
+#         - country.qmd
+#         - country_medium.qmd
+#         - conversion_paths.qmd
+#   appendices:
+#     - other_ideas.qmd
+
 project:
   type: website
   output-dir: docs
 
-format:
-  bookup-html:
-    toc: true
-    toc-depth: 3
-
-execute:
-  freeze: auto
-
-book:
+website:
   title: "SeekandHit Interview Task"
-  author: "David Jankoski"
-  date: today
-  downloads: [pdf, epub]
-  url: https://david-jankoski.github.io/seekandhit/
-  repo-url: https://github.com/david-jankoski/seekandhit
-  repo-actions: edit
   search: true
   reader-mode: true
+  navbar:
+    background: "#2e3f58"
+    left:
+      - href: index.qmd
+        text: Introduction
+      - summary.qmd
+      - text: "Summary"
+        menu:
+          - summary.qmd
   sidebar:
-    style: "docked"
-  chapters:
-    - index.qmd
-    - part: "Content"
-      chapters:
-        - summary.qmd
-        - country.qmd
-        - country_medium.qmd
-        - conversion_paths.qmd
-  appendices:
-    - other_ideas.qmd
+    style: "floating"
+    contents:
+      - section: "Sections"
+        contents:
+          - summary.qmd
+          - country.qmd
+          - country_medium.qmd
+          - conversion_paths.qmd
+      - section: "Appendix"
+        contents:
+          - other_ideas.qmd
+  page-footer:
+    left: "This is quite a fine footer."
+    right:
+      - icon: github
+        href: https://github.com/david-jankoski/seekandhit
+
+format:
+  bookup-html:
+    embed-fonts: true

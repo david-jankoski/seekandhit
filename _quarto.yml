@@ -5,13 +5,7 @@ project:
 format:
   bookup-html+dark:
     toc: true
-    toc-depth: 4
-  html:
-    theme:
-      light:
-        - bookup.scss
-      dark:
-        - bookup_dark.scss
+    toc-depth: 3
 
 execute:
   freeze: auto
@@ -38,10 +32,3 @@ book:
         - conversion_paths.qmd
   appendices:
     - other_ideas.qmd
-
-website:
-  search:
-    location: navbar
-    type: overlay
-  sidebar:
-    style: "docked"

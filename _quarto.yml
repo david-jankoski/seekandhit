@@ -69,5 +69,5 @@ website:
         href: https://github.com/david-jankoski/seekandhit
 
 format:
-  bookup-html:
+  bookup-html+dark:
     embed-fonts: true

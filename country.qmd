@@ -96,6 +96,25 @@ The removed countries seem to be indeed small countries.
 by_country |> filter(revenue < 20000)
 ```
 
+## Revenue map
+
+Going to try and plot the revenue, transactions, users on a map of the world - just to see how does it look like, where is the volume concentrated etc.
+
+```{r}
+#| label: revenue-map
+#| column: screen
+#| out-width: 70%
+#| fig-format: svg
+library("rworldmap")
+
+by_country_map <- joinCountryData2Map(
+  by_country,
+  joinCode = "NAME",
+  nameJoinColumn = "country"
+)
+mapCountryData(by_country_map, nameColumnToPlot = "revenue")
+```
+
 I will start with the following simple rule - either revenue more than €20,000 or users or transactions volume b bigger than 500 (i will come back to adjust these in case there is still lots of noise or conversely i am missing some granularity)
 
 ```{r}
@@ -108,7 +127,7 @@ by_country <- by_country |>
   )
 ```
 
-### Which countries "drive" the most ?
+## Which countries "drive" the most ?
 
 Which countries drive the most users ?
 
@@ -246,3 +265,159 @@ c(
 ```
 
 Ok this is confirmation enough i guess - Lithuania is \~140% bigger than Germany in terms of bringing users to the client's website - however it is strangely 6% of the revenue that Germany brings !?
+
+## Final overview of selected countries
+
+```{r}
+#| label: final-overview-selected-countries
+
+by_country |> 
+  summarise(
+    n_countries = n_distinct(country)
+  )
+```
+
+## Market penetration
+
+I would like to try out the following
+
+-   we have the data on how many users from a country were customers with our client in 2022
+-   we can get the data on countries population as well as proportion of population from each country that participates in tourism. these could be our \~ theoretical upper bound on the number of customers from a country i.e. imagining that every person from a country has purchased with the client - then we should see this number of users in the data
+-   the ratio of the first point to the second - would give us another view on "market penetration" - in the sense that we can say `1 in N` people from Country-A has purchased with the client in 2022.
+-   to tie this together - comparing these rations between *comparable* countries could give us an idea where we could boost our marketing efforts and increase the market presence.
+
+[Proportion of population that participated in tourism](https://ec.europa.eu/eurostat/statistics-explained/index.php?title=Tourism_statistics)
+
+More concretely:
+
+```{r}
+#| label: setup-countries-population
+library("openintro")
+library("eurostat")
+
+# total population of countries
+world_pop <- openintro::world_pop
+
+country_population <-
+  world_pop |> 
+  as_tibble() |> 
+  select(country, year_2020) |> 
+  rename(population = year_2020)
+
+# prorortion of population that participates in tourism
+country_tourists <- 
+  get_eurostat("tour_dem_totot") |>
+  label_eurostat() |> 
+  filter(
+    duration == "1 night or over",
+    c_dest == "All countries of the world",
+    unit == "Number",
+    time == ymd(20210101)
+  )|> 
+  select(geo, time, values) |>
+  rename(country = geo, tourists = values)
+
+# transactions ~ # of customers from country for our client
+country_customers <- 
+  by_country |> 
+  filter(country != "(not set)") |> 
+  slice_max(order_by = transactions, n = 10) |> 
+  select(country, transactions, revenue, revenue_per_transaction) |> 
+  rename(customers = transactions)
+
+# stick it all together
+country_penetration <- 
+  country_customers |> 
+  left_join(country_population, join_by(country)) |> 
+  left_join(country_tourists, join_by(country)) |> 
+  mutate(
+    customers_share = customers / tourists,
+    one_in_N_tourists_has_transacted = floor(1 / customers_share),
+    customers_share = percent_format(accuracy = 0.001)(customers_share)
+  ) |> 
+  arrange(desc(customers_share))
+
+country_penetration
+```
+
+Not all countries got matched - the tourism data is only for EU but that would do.
+
+```{r}
+country_penetration |> 
+  filter( !is.na(one_in_N_tourists_has_transacted) ) |> 
+  select(
+    country,
+    customers,
+    tourists,
+    one_in_N_tourists_has_transacted,
+    customers_share,
+    revenue,
+    revenue_per_transaction
+  )
+```
+
+If my logic and flow are correct - the situation is as following:
+
+-   1 in 962 Germans was a customer with our client in 2022
+-   1 in 632 French was a customer with our client in 2022
+
+Assuming these 2 are comparable markets, where our client has similar marketing initiatives, efforts, spend etc.
+
+The argument would be - If we could get the same market penetration in Germany as we have in France - for instance by using the same "marketing playbook" they did in France. Then they could potentially increase their market penetration in Germany from `0.104% -> 0.158%` .
+
+This would mean `r 0.00158 * 46994591`
+
+```{r}
+
+# numbers from table above
+current_revenue_germany <- 12906843
+current_customers_germany <- 48819
+current_revenue_per_customer_germany <- 264
+
+tourists_germany <- 46994591
+
+# the current and "hypothetical" customer share
+# the client could achieve
+current_customer_share_germany <- 0.00104
+potential_customer_share_germany <- 0.00158
+
+# potential customers if increase happens
+potential_customers_germany <- floor(
+  potential_customer_share_germany * tourists_germany
+)
+# potential revenue that follows from above
+potential_revenue_germany <- (
+  current_revenue_per_customer_germany * potential_customers_germany
+)
+# extra cash and uplift in revenue in Germany
+c(
+  increase_abs = comma_format(suffix = "€")(
+    potential_revenue_germany - current_revenue_germany
+  ),
+  uplift = percent_format(accuracy = 0.01)(
+    (potential_revenue_germany - current_revenue_germany) / current_revenue_germany
+  )
+)
+```
+
+## Throwaway things
+
+### Users map
+
+```{r}
+#| label: users-map
+#| column: screen
+#| out-width: 70%
+#| fig-format: svg
+mapCountryData(by_country_map, nameColumnToPlot = "users")
+```
+
+### Transactions map
+
+```{r}
+#| label: transactions-map
+#| column: screen
+#| out-width: 70%
+#| fig-format: svg
+mapCountryData(by_country_map, nameColumnToPlot = "transactions")
+```

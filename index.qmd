@@ -43,8 +43,14 @@ The date ranges in both files judging from the header comments and file names is
 
 # Structure of this doc
 
-You can find a TLDR / Executive summary in the Summary section. This is a condensed format of the main takeaways and does not bother with code or charts and is suitable for a quick and short overview.
+You can find a TLDR / [Executive Summary](summary.qmd#Executive%20summary) section. This is a condensed format of the main takeaways that tries to convey the message with few charts or tables and is suitable for a quick and short overview.
 
-The individual sections that look at the different views of the data can be found in [Country](country.qmd#Country), [Country / Medium](country_medium.qmd#Country%20/%20Medium) and [Conversion paths](conversion_paths.qmd#Conversion%20paths). I tried to express here my thoughts and investigations into text and code to reflect my approach to this task.
+The individual sections that look at the different views of the data can be found in:
+
+-   [Country](country.qmd#Country) - view on country level
+-   [Country / Medium](country_medium.qmd#Country%20/%20Medium) - analysis of the data provided on country / medium level
+-   [Conversion paths](conversion_paths.qmd#Conversion%20paths) - markov model based on the provided conversion paths data
+
+I tried to express there my thoughts and investigations into text and code to reflect my approach to this task.
 
 Some thoughts and ideas that did not fit anywhere above but were - in my opinion - worth keeping, can be found in the [Appendix](other_ideas.qmd#Other%20ideas) section.

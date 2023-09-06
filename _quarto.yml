@@ -1,38 +1,3 @@
-# project:
-#   type: website
-#   output-dir: docs
-#
-# format:
-#   bookup-html:
-#     toc: true
-#     toc-depth: 3
-#
-# execute:
-#   freeze: auto
-
-# book:
-#   title: "SeekandHit Interview Task"
-#   author: "David Jankoski"
-#   date: today
-#   downloads: [pdf, epub]
-#   url: https://david-jankoski.github.io/seekandhit/
-#   repo-url: https://github.com/david-jankoski/seekandhit
-#   repo-actions: edit
-#   search: true
-#   reader-mode: true
-#   sidebar:
-#     style: "docked"
-#   chapters:
-#     - index.qmd
-#     - part: "Content"
-#       chapters:
-#         - summary.qmd
-#         - country.qmd
-#         - country_medium.qmd
-#         - conversion_paths.qmd
-#   appendices:
-#     - other_ideas.qmd
-
 project:
   type: website
   output-dir: docs

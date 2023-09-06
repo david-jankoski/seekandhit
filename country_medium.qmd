@@ -1,1 +1,118 @@
+---
+echo: false
+code-fold: true
+monofont: Fira Code Light
+execute:
+  warning: false
+  code-fold: true
+---
+
 # Country / Medium
+
+```{r}
+#| label: setup
+library("here")
+library("fs")
+library("DT")
+library("glue")
+library("janitor")
+library("scales")
+library("tidyverse")
+
+data_dir <- "data"
+file_name <- "medium_country.csv"
+
+medium_country_raw <- 
+  read_csv(
+    path_join(c(here(), data_dir, file_name)),
+    skip = 6
+  ) |> 
+  clean_names()
+```
+
+## Filter on country level
+
+Using the results from the \[Country\](country.qmd#Final selection of countries) analysis - I decided to filter out some of the low volume countries in terms of \# users, transactions and revenue. This should reduce the "noise" a bit and focus on higher volume and impact markets while keeping our insights actionable.
+
+I decided to pick some simple rules for filtering out countries - more than 500 users and transactions and more than 20,000€ revenue. This leaves 91 countries in the list.
+
+```{r}
+#| label: aggregate-to-country-level
+#| echo: true
+by_country <- 
+  medium_country_raw |> 
+  group_by(country) |> 
+  summarise(
+    # summable-metrics
+    across(
+      c(users, new_users, sessions, transactions, revenue),
+      sum
+    ),
+    # take medians for the rates, shares, durations
+    across(
+      c(bounce_rate, pages_session, avg_session_duration, ecommerce_conversion_rate),
+      median
+    )
+  ) |> 
+  ungroup() |> 
+  # calculate new columns
+  mutate(
+    revenue_per_transaction = revenue / transactions,
+    new_users_share = new_users / users,
+  ) |> 
+  arrange(desc(revenue))
+
+# filter only bigger volume countries
+by_country <- by_country |> 
+  filter(
+    (revenue > 20000) & (users > 500) & (transactions > 500)
+  )
+
+datatable(
+  by_country,
+  options = list(fixedColumns = list(leftColumns = 1))
+)
+```
+
+```{r}
+by_country <- 
+  by_country |> 
+  rename_with(
+    ~ ifelse(
+      .x == "country",
+      .x,
+      glue("{.x}_country")
+    )
+  )
+by_country
+```
+
+```{r}
+medium_country <- 
+  # filtering join on top-volume countries
+  medium_country_raw |> 
+  inner_join(by_country, join_by(country)) |> 
+  # re-arrange a bit
+  arrange(desc(revenue_country), country, desc(revenue)) |> 
+  relocate(country, .before = medium) |> 
+  # calculate share of channel within country for main metrics
+  mutate(
+    revenue_share = revenue / revenue_country,
+    users_share = users / users_country,
+    new_users_share = new_users / new_users_country,
+    sessions_share = sessions / sessions_country,
+    transactions_share = sessions / transactions_country
+  ) |> 
+  # rank channels within country
+  group_by(country) |> 
+  mutate(
+    across(
+      c(users, new_users, sessions, transactions, revenue),
+      ~ dense_rank(desc(.x)),
+      .names = "{col}_channel_within_country_rank"
+    )
+  ) |> 
+  ungroup()
+
+medium_country
+```

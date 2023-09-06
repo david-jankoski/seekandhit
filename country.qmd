@@ -266,7 +266,7 @@ c(
 
 Ok this is confirmation enough i guess - Lithuania is \~140% bigger than Germany in terms of bringing users to the client's website - however it is strangely 6% of the revenue that Germany brings !?
 
-## Final overview of selected countries
+## Final selection of countries
 
 ```{r}
 #| label: final-overview-selected-countries

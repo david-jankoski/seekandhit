@@ -1,9 +1,9 @@
 project:
-  type: book
+  type: website
   output-dir: docs
 
 format:
-  bookup-html+dark:
+  bookup-html:
     toc: true
     toc-depth: 3
 

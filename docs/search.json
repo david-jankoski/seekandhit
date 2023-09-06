@@ -37,15 +37,15 @@
   {
     "objectID": "index.html",
     "href": "index.html",
-    "title": "SeekandHit Interview Task",
+    "title": "Introduction",
     "section": "",
-    "text": "Introduction\nHello and welcome to this project where I tried to explain and nicely present my analysis, thoughts, comments … around the interview task that I got from Ivan, which we will discuss in our next chat.\nThe main points are:\nYou can find a TLDR / Executive summary in the Summary section. This is a condensed format of the main takeaways and does not bother with code or charts and is suitable for a quick and short overview.\nThe individual sections that look at the different views of the data can be found in Country, Country / Medium and Conversion paths. I tried to express here my thoughts and investigations into text and code to reflect my approach to this task.\nSome thoughts and ideas that did not fit anywhere above but were - in my opinion - worth keeping, can be found in the Appendix section."
+    "text": "Hello and welcome to this project where I tried to explain and nicely present my analysis, thoughts, comments … around the interview task that I got from Ivan, which we will discuss in our next chat.\n\n\n\n\n\n\nTask overview\n\n\n\nHi, can you provide me with an in depth analysis of our marketing efforts, based on the data provided in the attachment.\nWe’d like to focus our activities on markets which we can easily scale while keeping long term profitability.\nOverview about our imaginary client:\nClient is a global passenger transfer company which focuses on short distance transport. Their customers are mostly people travelling for holidays with family, but around 15% of business also falls in the business travel category.\nDue to recent market changes they are looking into optimising their marketing efforts in order to overtake higher market share in the future; currently their main markets are US, UK, Argentina, and South Korea where they are market leaders with 30%+ market share\nTheir activities are in some markets mostly offline, while in others are just online.\n\n\nThe main points are:\n\nscale markets easily\nwhile keeping long term profitability\nin order to gain higher market share\n\n\n\nWhile one of the main points is around keeping profitability no data on marketing spend was provided which is essential in order to determine this.\nNevertheless, the data provided contained many interesting insights already - and besides that, I think it should not be too hard to also add this aspect to the existing analysis."
   },
   {
     "objectID": "index.html#callout",
     "href": "index.html#callout",
-    "title": "SeekandHit Interview Task",
-    "section": "Callout",
-    "text": "Callout\nWhile one of the main points is around keeping profitability no data on marketing spend was provided which is essential in order to determine this.\nNevertheless, the data provided contained many interesting insights already - and besides that, I think it should not be too hard to also add this aspect to the existing analysis."
+    "title": "Introduction",
+    "section": "",
+    "text": "While one of the main points is around keeping profitability no data on marketing spend was provided which is essential in order to determine this.\nNevertheless, the data provided contained many interesting insights already - and besides that, I think it should not be too hard to also add this aspect to the existing analysis."
   }
 ]

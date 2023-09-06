@@ -1,13 +1,16 @@
 ---
-echo: false
-code-fold: true
 monofont: Fira Code Light
+echo: true
+code-fold: true
 execute:
+  echo: true
   warning: false
   code-fold: true
 ---
 
 # Country / Medium
+
+Read in files and setup libraries.
 
 ```{r}
 #| label: setup
@@ -38,7 +41,6 @@ I decided to pick some simple rules for filtering out countries - more than 500 
 
 ```{r}
 #| label: aggregate-to-country-level
-#| echo: true
 by_country <- 
   medium_country_raw |> 
   group_by(country) |> 
@@ -74,7 +76,10 @@ datatable(
 )
 ```
 
+Rename country-level columns with a suffix.
+
 ```{r}
+#| label: rename-country-cols
 by_country <- 
   by_country |> 
   rename_with(
@@ -87,7 +92,10 @@ by_country <-
 by_country
 ```
 
+Setup a clean dataframe on country / medium level and compute some additional metrics.
+
 ```{r}
+#| label: medium-country-clean
 medium_country <- 
   # filtering join on top-volume countries
   medium_country_raw |> 
@@ -116,3 +124,41 @@ medium_country <-
 
 medium_country
 ```
+
+```{r}
+medium_country |> summarise(n_distinct(country))
+```
+
+```{r}
+medium_country |> 
+  group_by(country) |> 
+  summarise(n_mediums = n_distinct(medium)) |> 
+  ungroup() |> 
+  mutate(country = fct_reorder(country, n_mediums)) |> 
+  slice_max(order_by = n_mediums, n = 50) |> 
+  ggplot(aes(x = n_mediums, y = country)) +
+  geom_col()
+```
+
+\
+TODO: stacked-bar chart by country, bars filled by revenue brought by medium
+
+# TODO: Top channels
+
+Which channels are the most effective at driving traffic to your website ?
+
+## TODO: Percentage of new sessions
+
+How much of your website traffic represents new visitors ?
+
+## TODO: Other vs. Organic Search
+
+How do other channels compare to Organic Search Traffic ?
+
+# TODO: Sessions vs duration
+
+Compare the average amount of time users spend on your website to the number of sessions.
+
+# TODO: Conversion rate
+
+How effective is your website at converting visitors to leads or signups ?

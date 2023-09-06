@@ -6,11 +6,35 @@ number-sections: false
 
 ::: {.callout-note icon="false"}
 ## Task overview
+
+Hi, can you provide me with an in depth analysis of our marketing efforts, based on the data provided in the attachment.
+
+We'd like to focus our activities on markets which we can easily scale while keeping long term profitability.
+
+Overview about our imaginary client:
+
+Client is a global passenger transfer company which focuses on short distance transport. Their customers are mostly people travelling for holidays with family, but around 15% of business also falls in the business travel category.
+
+Due to recent market changes they are looking into optimising their marketing efforts in order to overtake higher market share in the future; currently their main markets are US, UK, Argentina, and South Korea where they are market leaders with 30%+ market share
+
+Their activities are in some markets mostly offline, while in others are just online.
+:::
+
+The main points are:
+
+-   scale markets easily
+
+-   while keeping long term profitability
+
+-   in order to gain higher market share
+
+::: callout-warning
+While one of the main points is around keeping *profitability* no data on marketing spend was provided which is essential in order to determine this.
+
+Nevertheless, the data provided contained interesting insights and besides - it would be relatively easy to add this aspect to the existing analysis.
 :::
 
 # Data
-
-# Callouts
 
 # Structure of this doc
 

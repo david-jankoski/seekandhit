@@ -3,9 +3,15 @@ project:
   output-dir: docs
 
 format:
-    bookup-html:
-        toc: true
-        toc-depth: 3
+  bookup-html+dark:
+    toc: true
+    toc-depth: 4
+  html:
+    theme:
+      light:
+        - bookup.scss
+      dark:
+        - bookup_dark.scss
 
 execute:
   freeze: auto
@@ -15,7 +21,7 @@ book:
   author: "David Jankoski"
   date: today
   downloads: [pdf, epub]
-  url: https://example.com
+  url: https://david-jankoski.github.io/seekandhit/
   repo-url: https://github.com/david-jankoski/seekandhit
   repo-actions: edit
   search: true
@@ -32,3 +38,10 @@ book:
         - conversion_paths.qmd
   appendices:
     - other_ideas.qmd
+
+website:
+  search:
+    location: navbar
+    type: overlay
+  sidebar:
+    style: "docked"

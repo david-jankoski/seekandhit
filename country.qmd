@@ -270,11 +270,8 @@ Ok this is confirmation enough i guess - Lithuania is \~140% bigger than Germany
 
 ```{r}
 #| label: final-overview-selected-countries
-
 by_country |> 
-  summarise(
-    n_countries = n_distinct(country)
-  )
+  summarise(n_countries = n_distinct(country))
 ```
 
 ## Market penetration
@@ -291,7 +288,8 @@ I would like to try out the following
 More concretely:
 
 ```{r}
-#| label: setup-countries-population
+#| label: setup-market-penetration
+#| echo: true
 library("openintro")
 library("eurostat")
 
@@ -337,12 +335,14 @@ country_penetration <-
   ) |> 
   arrange(desc(customers_share))
 
-country_penetration
+datatable(country_penetration)
 ```
 
 Not all countries got matched - the tourism data is only for EU but that would do.
 
 ```{r}
+#| label: eu-market-penetration
+#| echo: true
 country_penetration |> 
   filter( !is.na(one_in_N_tourists_has_transacted) ) |> 
   select(
@@ -353,7 +353,8 @@ country_penetration |>
     customers_share,
     revenue,
     revenue_per_transaction
-  )
+  ) |> 
+  datatable()
 ```
 
 If my logic and flow are correct - the situation is as following:
@@ -368,6 +369,8 @@ The argument would be - If we could get the same market penetration in Germany a
 This would mean `r 0.00158 * 46994591`
 
 ```{r}
+#| label: germany-potential
+#| echo: true
 
 # numbers from table above
 current_revenue_germany <- 12906843

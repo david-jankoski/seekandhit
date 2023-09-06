@@ -16,9 +16,9 @@
   {
     "objectID": "country.html",
     "href": "country.html",
-    "title": "Country",
+    "title": "My Document",
     "section": "",
-    "text": "Country"
+    "text": "Country\nIn this section I will try to look at the medium_country data from a level higher - aggregated per country. I would like to see first a high-level intro to the data, see which countries drive the most users and revenue, try to identify a subset on which I can focus the analysis and lastly - try to give an advise to our client by just looking at this level.\nThe source file contains data on 240 in total and e.g. looks like this for Croatia\n\n\n\n\n\n\n\nThe data is on country / medium level so I would like to collapse it down to just the country level grouping first and compute some additional high-level metrics.\n\n\n [1] \"medium\"                    \"country\"                  \n [3] \"users\"                     \"new_users\"                \n [5] \"sessions\"                  \"bounce_rate\"              \n [7] \"pages_session\"             \"avg_session_duration\"     \n [9] \"ecommerce_conversion_rate\" \"transactions\"             \n[11] \"revenue\""
   },
   {
     "objectID": "conversion_paths.html",

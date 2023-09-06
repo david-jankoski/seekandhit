@@ -1,1 +1,76 @@
+---
+title: "My Document"
+execute:
+  code-fold: true
+  echo: false
+  warning: false
+---
+
 # Country
+
+In this section I will try to look at the `medium_country` data from a level higher - aggregated per country. I would like to see first a high-level intro to the data, see which countries drive the most users and revenue, try to identify a subset on which I can focus the analysis and lastly - try to give an advise to our client by just looking at this level.
+
+```{r}
+#| label: setup
+library("here")
+library("fs")
+library("DT")
+library("janitor")
+library("scales")
+library("tidyverse")
+
+data_dir <- "data"
+file_name <- "medium_country.csv"
+
+medium_country_raw <- read_csv(
+  path_join(c(here(), data_dir, file_name)),
+  skip = 6
+) |> 
+  clean_names()
+
+n_countries_total <- medium_country_raw$country |> unique() |> length()
+```
+
+The source file contains data on `r n_countries_total` in total and e.g. looks like this for Croatia
+
+```{r}
+medium_country_raw |> 
+  filter(country == "Croatia") |> 
+  arrange(desc(revenue)) |> 
+  datatable()
+```
+
+The data is on country / medium level so I would like to collapse it down to just the country level grouping first and compute some additional high-level metrics.
+
+```{r}
+medium_country_raw |> colnames()
+```
+
+```{r}
+#| label: aggregate-to-country-level
+#| code-fold: true
+#| echo: true
+by_country <- 
+  medium_country_raw |> 
+  group_by(country) |> 
+  summarise(
+    # summable-metrics
+    across(
+      c(users, new_users, sessions, transactions, revenue),
+      sum
+    ),
+    # take medians for the rates, shares, durations
+    across(
+      c(bounce_rate, pages_session, avg_session_duration, ecommerce_conversion_rate),
+      median
+    )
+  ) |> 
+  ungroup() |> 
+  # calculate new columns
+  mutate(
+    revenue_per_transaction = revenue / transactions,
+    new_users_share = new_users / users
+  )
+
+by_country |> filter(country == "Croatia")
+```

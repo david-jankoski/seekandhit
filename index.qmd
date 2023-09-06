@@ -39,6 +39,8 @@ Nevertheless, the data provided contained many interesting insights already - an
 -   `medium_country.csv` data aggregated on country / medium level providing some high-level important metrics like \# sesssions, (new) users, transactions, revenue, bounce rate etc. This file is likely the format of the Google Analytics Acquisition Report.
 -   `conversion_paths.csv` data containing only the conversion paths that happened on the website and their monetary value. This file is likely the format of the Multi Channel Funnel Report from Google Analytics.
 
+The date ranges in both files judging from the header comments and file names is the full year of 2022.
+
 # Structure of this doc
 
 You can find a TLDR / Executive summary in the Summary section. This is a condensed format of the main takeaways and does not bother with code or charts and is suitable for a quick and short overview.

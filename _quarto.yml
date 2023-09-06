@@ -38,18 +38,14 @@ project:
   output-dir: docs
 
 website:
-  title: "SeekandHit Interview Task"
+  title: "SeekandHit Interview Task - David Jankoski"
   search: true
   reader-mode: true
   navbar:
     background: "#2e3f58"
     left:
       - href: index.qmd
-        text: Introduction
-      - summary.qmd
-      - text: "Summary"
-        menu:
-          - summary.qmd
+        text: "Introduction"
   sidebar:
     style: "floating"
     contents:

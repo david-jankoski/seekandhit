@@ -4,6 +4,8 @@ number-sections: false
 
 # Introduction
 
+Hello and welcome to this project where I tried to explain and nicely present my analysis, thoughts, comments ... around the interview task that I got from Ivan, which we will discuss in our next chat.
+
 ::: {.callout-note icon="false"}
 ## Task overview
 
@@ -23,25 +25,24 @@ Their activities are in some markets mostly offline, while in others are just on
 The main points are:
 
 -   scale markets easily
-
 -   while keeping long term profitability
-
 -   in order to gain higher market share
 
-::: callout-warning
+## Callout
+
 While one of the main points is around keeping *profitability* no data on marketing spend was provided which is essential in order to determine this.
 
-Nevertheless, the data provided contained interesting insights and besides - it would be relatively easy to add this aspect to the existing analysis.
-:::
+Nevertheless, the data provided contained many interesting insights already - and besides that, I think it should not be too hard to also add this aspect to the existing analysis.
 
 # Data
 
+-   `medium_country.csv` data aggregated on country / medium level providing some high-level important metrics like \# sesssions, (new) users, transactions, revenue, bounce rate etc. This file is likely the format of the Google Analytics Acquisition Report.
+-   `conversion_paths.csv` data containing only the conversion paths that happened on the website and their monetary value. This file is likely the format of the Multi Channel Funnel Report from Google Analytics.
+
 # Structure of this doc
 
-[Country](country.qmd#Country)
+You can find a TLDR / Executive summary in the Summary section. This is a condensed format of the main takeaways and does not bother with code or charts and is suitable for a quick and short overview.
 
-[Country / Medium](country_medium.qmd#Country%20/%20Medium)
+The individual sections that look at the different views of the data can be found in [Country](country.qmd#Country), [Country / Medium](country_medium.qmd#Country%20/%20Medium) and [Conversion paths](conversion_paths.qmd#Conversion%20paths). I tried to express here my thoughts and investigations into text and code to reflect my approach to this task.
 
-[Conversion paths](conversion_paths.qmd#Conversion%20paths)
-
-[Appendix](other_ideas.qmd#Other%20ideas)
+Some thoughts and ideas that did not fit anywhere above but were - in my opinion - worth keeping, can be found in the [Appendix](other_ideas.qmd#Other%20ideas) section.

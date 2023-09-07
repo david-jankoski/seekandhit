@@ -140,8 +140,88 @@ medium_country |>
   geom_col()
 ```
 
-\
-TODO: stacked-bar chart by country, bars filled by revenue brought by medium
+I want to see:
+
+# Countries with stacked bars as revenue/users/transactions, where the bars are filled by the medium contribution to it
+
+::: panel-tabset
+## Total Revenue
+
+Stacked bars filled by medium-revenue that add up to total revenue by country
+
+```{r}
+medium_country |> 
+  semi_join(
+    by_country |> slice_max(order_by = revenue_country, n = 15),
+    join_by(country)
+  ) |> 
+  filter(country != "(not set)") |> 
+  mutate(
+    medium = case_when(
+      medium == "(none)"    ~ "unknown",
+      medium == "(not set)" ~ "unknown",
+      .default = medium
+    ),
+    medium = fct_lump(medium, n = 6, w = revenue),
+    country = fct_reorder(country, revenue, sum)
+  ) |>
+  ggplot(aes(x = revenue, y = country, fill = medium)) +
+  geom_col(position = "stack") + 
+  scale_x_continuous(
+    labels = comma_format(),
+    expand = c(0, 0.3)
+  ) +
+  # scale_fill_manual(
+  #   values = RColorBrewer::brewer.pal(8, "Dark2")[-4]
+  #   values = RColorBrewer::brewer.pal(8, "Set1")[-6]
+  # ) +
+  scale_fill_brewer(palette = "Dark2", direction = 1) +
+  theme(
+    legend.position = "bottom"
+  ) +
+  labs(
+    y = NULL
+  )
+```
+
+## Revenue share
+
+```{r}
+medium_country |> 
+  semi_join(
+    by_country |> slice_max(order_by = revenue_country, n = 15),
+    join_by(country)
+  ) |> 
+  filter(country != "(not set)") |> 
+  mutate(
+    medium = case_when(
+      medium == "(none)"    ~ "unknown",
+      medium == "(not set)" ~ "unknown",
+      .default = medium
+    ),
+    medium = fct_lump(medium, n = 6, w = revenue_share),
+    medium = fct_reorder2(medium, country, revenue_share),
+    country = fct_reorder(country, revenue, sum)
+  ) |>
+  ggplot(aes(x = revenue_share, y = country, fill = medium)) +
+  geom_col(position = "stack") + 
+  scale_x_continuous(
+    labels = percent_format(),
+    expand = c(0, 0.01)
+  ) +
+  # scale_fill_manual(
+  #   values = RColorBrewer::brewer.pal(8, "Dark2")[-4]
+  #   values = RColorBrewer::brewer.pal(8, "Set1")[-6]
+  # ) +
+  scale_fill_brewer(palette = "Dark2", direction = 1) +
+  theme(
+    legend.position = "bottom"
+  ) +
+  labs(
+    y = NULL
+  )
+```
+:::
 
 # TODO: Top channels
 

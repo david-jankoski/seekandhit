@@ -150,23 +150,24 @@ I want to see:
 Stacked bars filled by medium-revenue that add up to total revenue by country
 
 ```{r}
-medium_country |> 
+medium_country |>
   semi_join(
-    by_country |> slice_max(order_by = revenue_country, n = 15),
+    by_country |> slice_max(order_by = revenue_country, n = 20),
     join_by(country)
-  ) |> 
-  filter(country != "(not set)") |> 
+  ) |>
+  filter(country != "(not set)") |>
   mutate(
     medium = case_when(
       medium == "(none)"    ~ "unknown",
       medium == "(not set)" ~ "unknown",
       .default = medium
     ),
-    medium = fct_lump(medium, n = 6, w = revenue),
+    medium = fct_lump(medium, n = 5, w = revenue),
+    medium = fct_reorder(medium, revenue, mean),
     country = fct_reorder(country, revenue, sum)
   ) |>
   ggplot(aes(x = revenue, y = country, fill = medium)) +
-  geom_col(position = "stack") + 
+  geom_col(position = "stack") +
   scale_x_continuous(
     labels = comma_format(),
     expand = c(0, 0.3)
@@ -187,12 +188,12 @@ medium_country |>
 ## Revenue share
 
 ```{r}
-medium_country |> 
+medium_country |>
   semi_join(
-    by_country |> slice_max(order_by = revenue_country, n = 15),
+    by_country |> slice_max(order_by = revenue_country, n = 20),
     join_by(country)
-  ) |> 
-  filter(country != "(not set)") |> 
+  ) |>
+  filter(country != "(not set)") |>
   mutate(
     medium = case_when(
       medium == "(none)"    ~ "unknown",
@@ -200,11 +201,11 @@ medium_country |>
       .default = medium
     ),
     medium = fct_lump(medium, n = 6, w = revenue_share),
-    medium = fct_reorder2(medium, country, revenue_share),
+    medium = fct_reorder(medium, revenue_share, mean),
     country = fct_reorder(country, revenue, sum)
   ) |>
   ggplot(aes(x = revenue_share, y = country, fill = medium)) +
-  geom_col(position = "stack") + 
+  geom_col(position = "stack") +
   scale_x_continuous(
     labels = percent_format(),
     expand = c(0, 0.01)
@@ -223,11 +224,181 @@ medium_country |>
 ```
 :::
 
+::: callout-tip
+## Some thoughts
+
+Referral seems to be the dominating medium in driving revenue, consistenly across all countries Kind of mixed 2nd place between cpc / unknown (none, not set) 3rd organic and small but visible contribution from email Czech Rep. seems to have a more "healthy" marketing mix compared to other countries that are largely driven by referral.
+:::
+
+# TODO: Distribution of revenue share across countries
+
+what is the distribution of revenue share for each medium across all countries ?
+
+::: panel-tabset
+## distribution of revenue share - per medium - across all countries
+
+```{r}
+medium_country |>
+  semi_join(
+    by_country |> slice_max(order_by = revenue_country, n = 50),
+    join_by(country)
+  ) |>
+  # filter(country != "(not set)") |>
+  mutate(
+    medium = case_when(
+      medium == "(none)"    ~ "unknown",
+      medium == "(not set)" ~ "unknown",
+      .default = medium
+    ),
+    medium = fct_lump(medium, n = 7, w = revenue),
+    medium = fct_reorder(medium, revenue)
+  ) |>
+  select(country, medium, revenue, revenue_country, revenue_share) |>
+
+  ggplot(aes(revenue_share)) +
+  geom_histogram() +
+  facet_wrap(~ medium, scales = "free_y", ncol = 1, strip.position = "right")
+
+```
+
+## like above in table form - with median values for revenue share across all countries
+
+```{r}
+medium_country |>
+  semi_join(
+    by_country |> slice_max(order_by = revenue_country, n = 50),
+    join_by(country)
+  ) |>
+  # filter(country != "(not set)") |>
+  mutate(
+    medium = case_when(
+      medium == "(none)"    ~ "unknown",
+      medium == "(not set)" ~ "unknown",
+      .default = medium
+    ),
+    medium = fct_lump(medium, n = 7, w = revenue),
+    medium = fct_reorder(medium, revenue, .desc = T)
+  ) |>
+  select(country, medium, revenue, revenue_country, revenue_share) |>
+  group_by(medium) |>
+  summarise(
+    median_revenue_share = median(revenue_share),
+    median_revenue_share = percent_format(accuracy = 0.01)(median_revenue_share)
+  )
+```
+:::
+
+Ok so far i think it is quite convincing picture that the main driver of revenue across all countries is referral. 2nd place is paid search / cpc with 8%.
+
+3rd and 4th place is organic / unknown / not set / none -\> for the sake of the
+
+without any harm we could assume these are actually all organic. that would make organic on par with paid search / cpc. this means free trafic brings as much revenue as paid traffic. ?!
+
+since the client is a transport company (i imagine airline or train/bus company here) - i don't expect email to be actually very efficient channel ...i would not expect people to see/open some email and decide to actually travel somewhere ? it seems to me more like you would typically use a search engine to explore prices / opportunities --\> review your options --\> make a decision at some point - and very likely then go straight to the transport provider website (so organic revenue should be higher - if anything ?) but that's maybe just personal experience.
+
+Going out on a limb / perhaps bit too much reading the bottom of the coffee cup :-) I think that depending so much on referral might be "dangerous" for the client because referral can only get you so far i.e. existing customers referring the business to their friends and family. this does not sound like it would be "setup for scaling" i.e. in order to really scale up the business then it would be better to expand the organic / paid search / email marketing channels to be bigger engines of growth (but then again - we only have 1 year of data so this might indeed be the case - that these are indeed growing in the past years ?)
+
+# TODO: what is the revenue per transaction for the different channels ?
+
+Does cpc have higher r.p.t. than referral ?\
+Is any medium better than referral so it should be scaled ?
+
+```{r}
+#| label: bootstrap-mean-revenue-per-transaction
+library("rsample")
+
+bootstrap_means <- medium_country |>
+  select(country, medium, revenue, transactions) |>
+  # filter out low volume rows
+  filter(
+    revenue > 500,
+    transactions > 30
+  ) |>
+  mutate(revenue_per_transaction = revenue / transactions) |>
+  # lump together some low volume mediums  
+  mutate(
+    medium = fct_lump(medium, n = 7, w = revenue_per_transaction),
+    medium = fct_reorder(medium, revenue_per_transaction, .desc = T)
+  ) |> 
+  # bootstrap 
+  bootstraps(times = 10000, strata = medium) |> 
+  mutate(
+    boot_means = map(splits, ~ {
+      # calculate means grouped by medium
+      as.data.frame(.x) |> 
+        group_by(medium) |> 
+        summarise(mean_revenue_per_transaction = mean(revenue_per_transaction))
+    })
+  ) |> 
+  # explode into long dataframe
+  unnest(boot_means)
+
+bootstrap_means_wide <- bootstrap_means |> 
+  # calculate percentiles of distribution
+  group_by(medium) |> 
+  reframe(
+    percentile = c("05", "50", "95"),
+    value = quantile(mean_revenue_per_transaction, probs = c(0.05, 0.50, 0.95))
+  ) |> 
+  # flip to better format for plotting
+  pivot_wider(
+    id_cols = medium,
+    names_from = percentile,
+    values_from = value,
+    names_prefix = "boot_mean_"
+  )
+
+# Plot
+bootstrap_means_wide |> 
+  mutate(medium = fct_reorder(medium, boot_mean_50)) |> 
+  ggplot() +
+  geom_point(aes(x = medium, y = boot_mean_05), color = "dodgerblue4", size = 3) +
+  geom_point(aes(x = medium, y = boot_mean_50), color = "dodgerblue3", size = 3) +
+  geom_point(aes(x = medium, y = boot_mean_95), color = "dodgerblue4", size = 3) +
+  geom_segment(
+    aes(x = medium, xend = medium, y = boot_mean_05, yend = boot_mean_95),
+    colour = "grey60"
+  ) +
+  scale_y_continuous(
+    breaks = seq(0, 700, 50),
+  ) +
+  coord_flip() +
+  labs(
+    x = NULL,
+    y = "Mean Revenue per Transaction",
+    title = "Bootstrap means for Revenue per Transaction for different Mediums",
+    subtitle = "Showing 5th / 50th (median) / 95th percentile for the bootstrapped values for the means"
+  ) +
+  theme(
+    legend.position = "none",
+    plot.title.position = "plot"
+    )
+
+
+# test for signif.difference between 
+# referral vs. organic bootstrap dist. of 
+# revenue per transaction means
+
+rev_per_trans_referral <- bootstrap_means |> 
+  filter(medium == "referral") |>
+  pull(mean_revenue_per_transaction)
+
+rev_per_trans_referral_organic <- bootstrap_means |>
+  filter(medium == "organic") |>
+  pull(mean_revenue_per_transaction)
+
+t.test(
+  rev_per_trans_referral,
+  rev_per_trans_referral_organic,
+  alternative = "greater"
+)
+```
+
 # TODO: Top channels
 
 Which channels are the most effective at driving traffic to your website ?
 
-## TODO: Percentage of new sessions
+## TODO: Percentage of new customers ?
 
 How much of your website traffic represents new visitors ?
 

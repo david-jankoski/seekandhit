@@ -2,24 +2,32 @@
 monofont: Fira Code Light
 echo: true
 code-fold: true
-execute:
-  echo: true
-  warning: false
-  code-fold: true
+page-layout: full
 ---
 
 # Country / Medium
 
-Read in files and setup libraries.
+In this section I want to look at the data on the granular country/medium level. Roughly, the questions I plan to ask and answer are:
+
+-   identify and remove some noise in the data (low or zero volume mediums ?)
+-   explore the marketing mix across countries in terms of the main metrics
+    -   e.g. which mediums bring the most revenue and is this consisent across countries ?
+-   are there some things that jump out in terms of "bad traffic" (bounce rates and session durations) ?
+-   are there countries with relatively low volume of free traffic - that however converts very well - which could indicate potential for market expansion ?
+
+# Data exploration
 
 ```{r}
 #| label: setup
+#| warning: false
+#| message: false
 library("here")
 library("fs")
 library("DT")
 library("glue")
 library("janitor")
 library("scales")
+library("rsample")
 library("tidyverse")
 
 data_dir <- "data"
@@ -33,14 +41,12 @@ medium_country_raw <-
   clean_names()
 ```
 
-## Filter on country level
+## Filter out low volume countries
 
-Using the results from the \[Country\](country.qmd#Final selection of countries) analysis - I decided to filter out some of the low volume countries in terms of \# users, transactions and revenue. This should reduce the "noise" a bit and focus on higher volume and impact markets while keeping our insights actionable.
-
-I decided to pick some simple rules for filtering out countries - more than 500 users and transactions and more than 20,000€ revenue. This leaves 91 countries in the list.
+Using the results from the \[Country\](country.qmd#remove-low-volume-countries) analysis - I decided to filter out some of the low volume countries in terms of \# users, transactions and revenue. This should reduce the noise and focus on higher volume and impact markets while keeping our insights actionable.
 
 ```{r}
-#| label: aggregate-to-country-level
+#| label: remove-low-volume-countries
 by_country <- 
   medium_country_raw |> 
   group_by(country) |> 
@@ -66,30 +72,20 @@ by_country <-
 
 # filter only bigger volume countries
 by_country <- by_country |> 
-  filter(
-    (revenue > 20000) & (users > 500) & (transactions > 500)
-  )
-
-datatable(
-  by_country,
-  options = list(fixedColumns = list(leftColumns = 1))
-)
+  filter((revenue > 20000) | (users > 1000) | (transactions > 100) )
 ```
 
-Rename country-level columns with a suffix.
+Rename country-level columns with a suffix, I will stick them to the country-medium data to be able to compute further columns like shares and percentages.
 
 ```{r}
 #| label: rename-country-cols
-by_country <- 
-  by_country |> 
+by_country <- by_country |> 
   rename_with(
-    ~ ifelse(
-      .x == "country",
-      .x,
-      glue("{.x}_country")
-    )
+    .fn = ~ glue("{.x}_country"),
+    .cols = c(everything(), -country)
   )
-by_country
+
+by_country |> head(6) |> datatable(options = list(dom = "t"))
 ```
 
 Setup a clean dataframe on country / medium level and compute some additional metrics.
@@ -105,51 +101,334 @@ medium_country <-
   relocate(country, .before = medium) |> 
   # calculate share of channel within country for main metrics
   mutate(
-    revenue_share = revenue / revenue_country,
-    users_share = users / users_country,
-    new_users_share = new_users / new_users_country,
-    sessions_share = sessions / sessions_country,
-    transactions_share = sessions / transactions_country
+    revenue_share      = revenue       / revenue_country,
+    users_share        = users         / users_country,
+    new_users_share    = new_users     / new_users_country,
+    sessions_share     = sessions      / sessions_country,
+    transactions_share = transactions  / transactions_country
   ) |> 
   # rank channels within country
   group_by(country) |> 
   mutate(
     across(
       c(users, new_users, sessions, transactions, revenue),
-      ~ dense_rank(desc(.x)),
+      .fns = ~ dense_rank(desc(.x)),
       .names = "{col}_channel_within_country_rank"
     )
   ) |> 
   ungroup()
 
-medium_country
+
+medium_country |> filter(country == "Spain") |> datatable(options = list(dom = "t"))
 ```
 
-```{r}
-medium_country |> summarise(n_distinct(country))
-```
+Besides filtering out the low volume countries, I would like to also filter out the super low volume `(country, medium)` pairs. In the above table for instance, scrolling to the last page shows pairs like e.g. `(Spain, Twitter) , (Spain, sms)` which have `1` user and `0` revenue.
+
+I would like to check the share of such low volume country/medium pairs. Again taking just some kind of cut-off points - I'm going to start with:
+
+`revenue < 100  or  users < 10  or  transaction < 10`
+
+as a simple rule to filter these out.
 
 ```{r}
+#| label: check-proportion-low-volume-mediums
+medium_country <- medium_country |> 
+  mutate(
+    is_low_volume_medium = {
+      (revenue < 50) & (users < 5) & (transactions  < 5)
+    }
+  ) 
+
+medium_country |> 
+  count(is_low_volume_medium) |> 
+  mutate(perc = round(n / sum(n), 3)) |> 
+  datatable(options = list(dom = 't'))
+```
+
+Ok seems like quite a big percentage of the country/medium pairs are actually low volume i.e. have less than 10 users, 10 transactions and 100 revenue. This seems quite a low benchmark so removing them seems the correct way to go because their contribution and impact is very limited.
+
+In order to see the effect of this - I would like to check the number of mediums per country before and after the removal.
+
+::: panel-tabset
+## Before removal
+
+```{r}
+#| label: mediums-per-country-before-removal
 medium_country |> 
   group_by(country) |> 
   summarise(n_mediums = n_distinct(medium)) |> 
   ungroup() |> 
   mutate(country = fct_reorder(country, n_mediums)) |> 
-  slice_max(order_by = n_mediums, n = 50) |> 
+  slice_max(order_by = n_mediums, n = 20) |> 
   ggplot(aes(x = n_mediums, y = country)) +
-  geom_col()
+  geom_col(fill = "mediumpurple4") +
+  labs(
+    title = "# of Mediums per Country - before removal of low volume mediums",
+    x = "# Mediums",
+    y = NULL
+  )
 ```
 
-I want to see:
-
-# Countries with stacked bars as revenue/users/transactions, where the bars are filled by the medium contribution to it
-
-::: panel-tabset
-## Total Revenue
-
-Stacked bars filled by medium-revenue that add up to total revenue by country
+## After removal
 
 ```{r}
+#| label: mediums-per-country-after-removal
+medium_country |>
+  filter( !is_low_volume_medium ) |> 
+  group_by(country) |> 
+  summarise(n_mediums = n_distinct(medium)) |> 
+  ungroup() |> 
+  mutate(country = fct_reorder(country, n_mediums)) |> 
+  slice_max(order_by = n_mediums, n = 20) |> 
+  ggplot(aes(x = n_mediums, y = country)) +
+  geom_col(fill = "mediumpurple4") +
+  labs(
+    title = "# of Mediums per Country - after removal of low volume mediums",
+    x = "# Mediums",
+    y = NULL
+  )
+```
+:::
+
+It seems like it halved the \# of mediums per country.
+
+```{r}
+#| eval: false
+medium_country |>
+  mutate(is_low_volume_medium = factor(is_low_volume_medium, levels = c(T, F), ordered = T)) |> 
+  group_by(country, is_low_volume_medium) |> 
+  summarise(n_mediums = n_distinct(medium)) |>
+  mutate(n_mediums_total = sum(n_mediums)) |> 
+  ungroup() |> 
+  mutate(
+    country = fct_reorder(country, n_mediums_total, sum),
+    country = fct_lump(country, w = n_mediums_total, n = 20, ties.method = "random")
+  ) |> 
+  filter( country != "Other" ) |> 
+  ggplot(aes(x = n_mediums, y = country, fill = is_low_volume_medium)) +
+  geom_col() +
+  #scale_fill_brewer(palette = "Dark2") +
+  scale_fill_manual(
+    name = "Is Low Volume Medium ?",
+    values = c(`FALSE` = "green4", `TRUE` = "red3")
+  ) +
+  labs(
+    title = "# of Mediums per Country, coloured by Too Low / Ok volume ?",
+    x = "# Mediums",
+    y = NULL
+  ) +
+  theme(
+    legend.position = "bottom",
+    legend.direction = "horizontal"
+  )
+```
+
+```{r}
+#| eval: false
+low_vol_mediums <- 
+  medium_country |>
+  group_by(country, is_low_volume_medium) |> 
+  summarise(n_mediums = n_distinct(medium)) |>
+  mutate(n_mediums_total = sum(n_mediums)) |> 
+  ungroup()
+
+
+low_vol_mediums |> 
+  
+  mutate(
+    country = fct_lump(country, w = n_mediums_total, n = 20, ties.method = "random")
+  ) |> 
+  filter( country != "Other" ) |> 
+  
+  mutate(
+    country = fct_reorder(country, ave(is_low_volume_medium, country), max),
+    fct_inorder()
+  ) |> 
+  
+  ggplot(aes(x = n_mediums, y = country, fill = is_low_volume_medium)) +
+  geom_col(position = position_fill(reverse = T)) +
+  scale_fill_manual(
+    name = "Is Low Volume Medium ?",
+    values = c(`FALSE` = "green4", `TRUE` = "red3")
+  ) +
+  labs(
+    title = "# of Mediums per Country, coloured by Too Low / Ok volume ?",
+    x = "# Mediums",
+    y = NULL
+  ) +
+  theme(
+    legend.position = "bottom",
+    legend.direction = "horizontal"
+  )
+```
+
+### Remove low volume mediums
+
+```{r}
+#| label: remove-low-volume-mediums
+medium_country <- medium_country |>
+  filter(!is_low_volume_medium) |> 
+  select(-is_low_volume_medium)
+```
+
+# Country/Medium profiles
+
+What are the contributions of different mediums to the main metrics, across the different countries ?
+
+## Absolute
+
+I am going to stack each country's bars to the total absolute volume of the respective metric. The different colours of the mediums would add up to the total of the country for that metric in absolute units.
+
+::: panel-tabset
+### Sessions
+
+```{r}
+#| label: stacked-bars-medium-sessions-absolute
+medium_country |>
+  semi_join(
+    by_country |> slice_max(order_by = sessions_country, n = 20),
+    join_by(country)
+  ) |>
+  filter(country != "(not set)") |>
+  mutate(
+    medium = fct_lump(medium, n = 6, w = sessions),
+    medium = fct_reorder(medium, sessions, max),
+    country = fct_reorder(country, sessions, sum)
+  ) |>
+  ggplot(aes(x = sessions, y = country, fill = medium)) +
+  geom_col(position = "stack") +
+  scale_x_continuous(labels = comma_format(), expand = c(0, 0.3)) +
+  scale_fill_brewer(palette = "Dark2", direction = 1) +
+  theme(
+    plot.title.position = "plot",
+    legend.position = "bottom"
+  ) +
+  labs(
+    title = "Sessions contribution of Mediums across Countries",
+    y = NULL
+  )
+```
+
+### Users
+
+```{r}
+#| label: stacked-bars-medium-users-absolute
+medium_country |>
+  semi_join(
+    by_country |> slice_max(order_by = users_country, n = 20),
+    join_by(country)
+  ) |>
+  filter(country != "(not set)") |>
+  mutate(
+    medium = fct_lump(medium, n = 6, w = users),
+    medium = fct_reorder(medium, users, mean),
+    country = fct_reorder(country, users, sum)
+  ) |>
+  ggplot(aes(x = users, y = country, fill = medium)) +
+  geom_col(position = "stack") +
+  scale_x_continuous(labels = comma_format(), expand = c(0, 0.3)) +
+  scale_fill_brewer(palette = "Dark2", direction = 1) +
+  theme(
+    plot.title.position = "plot",
+    legend.position = "bottom"
+  ) +
+  labs(
+    title = "Users contribution of Mediums across Countries",
+    y = NULL
+  )
+```
+
+### New users
+
+```{r}
+#| label: stacked-bars-medium-new-users-absolute
+medium_country |>
+  semi_join(
+    by_country |> slice_max(order_by = new_users_country, n = 20),
+    join_by(country)
+  ) |>
+  filter(country != "(not set)") |>
+  mutate(
+    medium = fct_lump(medium, n = 6, w = new_users),
+    medium = fct_reorder(medium, new_users, mean),
+    country = fct_reorder(country, new_users, sum)
+  ) |>
+  ggplot(aes(x = new_users, y = country, fill = medium)) +
+  geom_col(position = "stack") +
+  scale_x_continuous(labels = comma_format(), expand = c(0, 0.3)) +
+  scale_fill_brewer(palette = "Dark2", direction = 1) +
+  theme(
+    plot.title.position = "plot",
+    legend.position = "bottom"
+  ) +
+  labs(
+    title = "New Users contribution of Mediums across Countries",
+    y = NULL
+  )
+```
+
+### Ecommerce conversion rate
+
+```{r}
+#| label: stacked-bars-medium-ecomm-conv-rate-absolute
+medium_country |>
+  semi_join(
+    by_country |> slice_max(order_by = revenue_country, n = 4),
+    join_by(country)
+  ) |>
+  filter(country != "(not set)") |>
+  mutate(
+    medium = fct_lump(medium, n = 7, w = ecommerce_conversion_rate),
+    medium = fct_reorder(medium, ecommerce_conversion_rate, mean),
+    country = fct_reorder(country, ecommerce_conversion_rate, sum)
+  ) |>
+  ggplot(aes(x = ecommerce_conversion_rate, y = country, fill = medium)) +
+  geom_col(position = "stack") +
+  scale_x_continuous(labels = percent_format(accuracy = 0.1), expand = c(0, 0)) +
+  scale_fill_brewer(palette = "Dark2", direction = 1) +
+  theme(
+    plot.title.position = "plot",
+    legend.position = "bottom"
+  ) +
+  labs(
+    title = "Ecommerce conversion rate contribution of Mediums across Countries",
+    y = NULL
+  )
+```
+
+### Transactions
+
+```{r}
+#| label: stacked-bars-medium-transactions-absolute
+medium_country |>
+  semi_join(
+    by_country |> slice_max(order_by = transactions_country, n = 20),
+    join_by(country)
+  ) |>
+  filter(country != "(not set)") |>
+  mutate(
+    medium = fct_lump(medium, n = 6, w = transactions),
+    medium = fct_reorder(medium, transactions, mean),
+    country = fct_reorder(country, transactions, sum)
+  ) |>
+  ggplot(aes(x = transactions, y = country, fill = medium)) +
+  geom_col(position = "stack") +
+  scale_x_continuous(labels = comma_format(), expand = c(0, 0.3)) +
+  scale_fill_brewer(palette = "Dark2", direction = 1) +
+  theme(
+    plot.title.position = "plot",
+    legend.position = "bottom"
+  ) +
+  labs(
+    title = "Transactions contribution of Mediums across Countries",
+    y = NULL
+  )
+```
+
+### Revenue
+
+```{r}
+#| label: stacked-bars-medium-revenue-absolute
 medium_country |>
   semi_join(
     by_country |> slice_max(order_by = revenue_country, n = 20),
@@ -157,37 +436,138 @@ medium_country |>
   ) |>
   filter(country != "(not set)") |>
   mutate(
-    medium = case_when(
-      medium == "(none)"    ~ "unknown",
-      medium == "(not set)" ~ "unknown",
-      .default = medium
-    ),
-    medium = fct_lump(medium, n = 5, w = revenue),
+    medium = fct_lump(medium, n = 6, w = revenue),
     medium = fct_reorder(medium, revenue, mean),
     country = fct_reorder(country, revenue, sum)
   ) |>
   ggplot(aes(x = revenue, y = country, fill = medium)) +
   geom_col(position = "stack") +
-  scale_x_continuous(
-    labels = comma_format(),
-    expand = c(0, 0.3)
-  ) +
-  # scale_fill_manual(
-  #   values = RColorBrewer::brewer.pal(8, "Dark2")[-4]
-  #   values = RColorBrewer::brewer.pal(8, "Set1")[-6]
-  # ) +
+  scale_x_continuous(labels = comma_format(), expand = c(0, 0.3)) +
   scale_fill_brewer(palette = "Dark2", direction = 1) +
   theme(
+    plot.title.position = "plot",
     legend.position = "bottom"
   ) +
   labs(
+    title = "Revenue contribution of Mediums across Countries",
+    y = NULL
+  )
+```
+:::
+
+## Share
+
+Here i want to stack each country's bars to 100% of the respective metric. The different colours of the mediums would represent the share in % that this medium contributed to the 100% for that metric and for that country.
+
+::: panel-tabset
+### Sessions
+
+```{r}
+#| label: stacked-bars-medium-sessions-share
+medium_country |>
+  semi_join(
+    by_country |> slice_max(order_by = sessions_country, n = 20),
+    join_by(country)
+  ) |>
+  filter(country != "(not set)") |>
+  mutate(
+    medium = fct_lump(medium, n = 6, w = sessions_share),
+    medium = fct_reorder(medium, sessions_share, max),
+    country = fct_reorder(country, sessions, sum)
+  ) |>
+  ggplot(aes(x = sessions_share, y = country, fill = medium)) +
+  geom_col(position = "stack") +
+  scale_x_continuous(labels = percent_format(), expand = c(0, 0)) +
+  scale_fill_brewer(palette = "Dark2", direction = 1) +
+  theme(legend.position = "bottom") +
+  labs(
+    title = "Sessions share per Medium across Countries",
     y = NULL
   )
 ```
 
-## Revenue share
+### Users
 
 ```{r}
+#| label: stacked-bars-medium-users-share
+medium_country |>
+  semi_join(
+    by_country |> slice_max(order_by = users_country, n = 20),
+    join_by(country)
+  ) |>
+  filter(country != "(not set)") |>
+  mutate(
+    medium = fct_lump(medium, n = 6, w = users_share),
+    medium = fct_reorder(medium, users_share, max),
+    country = fct_reorder(country, users, sum)
+  ) |>
+  ggplot(aes(x = users_share, y = country, fill = medium)) +
+  geom_col(position = "stack") +
+  scale_x_continuous(labels = percent_format(), expand = c(0, 0)) +
+  scale_fill_brewer(palette = "Dark2", direction = 1) +
+  theme(legend.position = "bottom") +
+  labs(
+    title = "Users share per Medium across Countries",
+    y = NULL
+  )
+```
+
+### New users
+
+```{r}
+#| label: stacked-bars-medium-new-users-share
+medium_country |>
+  semi_join(
+    by_country |> slice_max(order_by = new_users_country, n = 20),
+    join_by(country)
+  ) |>
+  filter(country != "(not set)") |>
+  mutate(
+    medium = fct_lump(medium, n = 6, w = new_users_share),
+    medium = fct_reorder(medium, new_users_share, max),
+    country = fct_reorder(country, new_users, sum)
+  ) |>
+  ggplot(aes(x = new_users_share, y = country, fill = medium)) +
+  geom_col(position = "stack") +
+  scale_x_continuous(labels = percent_format(), expand = c(0, 0)) +
+  scale_fill_brewer(palette = "Dark2", direction = 1) +
+  theme(legend.position = "bottom") +
+  labs(
+    title = "New Users share per Medium across Countries",
+    y = NULL
+  )
+```
+
+### Transactions
+
+```{r}
+#| label: stacked-bars-medium-transactions-share
+medium_country |>
+  semi_join(
+    by_country |> slice_max(order_by = transactions_country, n = 20),
+    join_by(country)
+  ) |>
+  filter(country != "(not set)") |>
+  mutate(
+    medium = fct_lump(medium, n = 6, w = transactions_share),
+    medium = fct_reorder(medium, transactions_share, max),
+    country = fct_reorder(country, transactions, sum)
+  ) |>
+  ggplot(aes(x = transactions_share, y = country, fill = medium)) +
+  geom_col(position = "stack") +
+  scale_x_continuous(labels = percent_format(), expand = c(0, 0)) +
+  scale_fill_brewer(palette = "Dark2", direction = 1) +
+  theme(legend.position = "bottom") +
+  labs(
+    title = "Transactions share per Medium across Countries",
+    y = NULL
+  )
+```
+
+### Revenue
+
+```{r}
+#| label: stacked-bars-medium-revenue-share
 medium_country |>
   semi_join(
     by_country |> slice_max(order_by = revenue_country, n = 20),
@@ -195,87 +575,146 @@ medium_country |>
   ) |>
   filter(country != "(not set)") |>
   mutate(
-    medium = case_when(
-      medium == "(none)"    ~ "unknown",
-      medium == "(not set)" ~ "unknown",
-      .default = medium
-    ),
     medium = fct_lump(medium, n = 6, w = revenue_share),
     medium = fct_reorder(medium, revenue_share, mean),
     country = fct_reorder(country, revenue, sum)
   ) |>
   ggplot(aes(x = revenue_share, y = country, fill = medium)) +
   geom_col(position = "stack") +
-  scale_x_continuous(
-    labels = percent_format(),
-    expand = c(0, 0.01)
-  ) +
-  # scale_fill_manual(
-  #   values = RColorBrewer::brewer.pal(8, "Dark2")[-4]
-  #   values = RColorBrewer::brewer.pal(8, "Set1")[-6]
-  # ) +
+  scale_x_continuous(labels = percent_format(), expand = c(0, 0)) +
   scale_fill_brewer(palette = "Dark2", direction = 1) +
   theme(
+    plot.title.position = "plot",
     legend.position = "bottom"
   ) +
   labs(
+    title = "Revenue share per Medium across Countries",
     y = NULL
   )
 ```
 :::
 
-::: callout-tip
-## Some thoughts
+## Table of medians
 
-Referral seems to be the dominating medium in driving revenue, consistenly across all countries Kind of mixed 2nd place between cpc / unknown (none, not set) 3rd organic and small but visible contribution from email Czech Rep. seems to have a more "healthy" marketing mix compared to other countries that are largely driven by referral.
+Tabulated view of the median values for each medium - of the respective metric's country share e.g. the median for `referral`'s `transaction_share` across all countries. Should give an idea of where this medium sits in the overall ranking of mediums across all countries.
+
+```{r}
+sessions_share_medians <- medium_country |>
+  semi_join(
+    by_country |> slice_max(order_by = sessions_country, n = 20),
+    join_by(country)
+  ) |> 
+  group_by(medium) |> 
+  summarise(median_sessions_share = median(sessions_share)) |>
+  slice_max(order_by = median_sessions_share, n = 20) |> 
+  mutate(median_sessions_share = percent_format(accuracy = 0.01)(median_sessions_share))
+
+
+users_share_medians <- medium_country |>
+  semi_join(
+    by_country |> slice_max(order_by = users_country, n = 20),
+    join_by(country)
+  ) |> 
+  group_by(medium) |> 
+  summarise(median_users_share = median(users_share)) |>
+  slice_max(order_by = median_users_share, n = 20) |> 
+  mutate(median_users_share = percent_format(accuracy = 0.01)(median_users_share))
+
+
+new_users_share_medians <- medium_country |>
+  semi_join(
+    by_country |> slice_max(order_by = new_users_country, n = 20),
+    join_by(country)
+  ) |> 
+  group_by(medium) |> 
+  summarise(median_new_users_share = median(new_users_share)) |>
+  slice_max(order_by = median_new_users_share, n = 20) |> 
+  mutate(median_new_users_share = percent_format(accuracy = 0.01)(median_new_users_share))
+
+transactions_share_medians <- medium_country |>
+  semi_join(
+    by_country |> slice_max(order_by = transactions_country, n = 20),
+    join_by(country)
+  ) |> 
+  group_by(medium) |> 
+  summarise(median_transactions_share = median(transactions_share)) |>
+  slice_max(order_by = median_transactions_share, n = 20) |> 
+  mutate(median_transactions_share = percent_format(accuracy = 0.01)(median_transactions_share))
+
+
+revenue_share_medians <- medium_country |>
+  semi_join(
+    by_country |> slice_max(order_by = revenue_country, n = 20),
+    join_by(country)
+  ) |> 
+  group_by(medium) |> 
+  summarise(median_revenue_share = median(revenue_share)) |>
+  slice_max(order_by = median_revenue_share, n = 20) |> 
+  mutate(median_revenue_share = percent_format(accuracy = 0.01)(median_revenue_share))
+
+list(
+  sessions_share_medians,
+  users_share_medians,
+  new_users_share_medians,
+  transactions_share_medians,
+  revenue_share_medians
+) |> 
+  reduce(left_join, by = join_by(medium)) |> 
+  datatable()
+
+```
+
+::: callout-tip
+## Conclusion for this part
+
+-   `referral` seems to be consistently the dominating medium across countries, driving \~45% of sessions / (new) users and \~75% of transactions and revenue
+-   `(none)` is on the 2nd place, driving \~26% of sessions and (new) users, \~ 8% of transactions and revenue
+-   `cpc` is on the 3rd place, driving \~11% of sessions and (new) users, \~8% of transactions and revenue
+
+Taking `referral, (none), organic, email` as free mediums - they jointly would contribute with \~75% of the traffic and \~85% of transactions and revenue overall. The "free" group of mediums in the medium-mix of the client are responsiblie for a big portion of the traffic and business - which is a good thing - in the sense that no (or little) marketing money is spent in order to generate this.
+
+Probably not entirely true as e.g. brand marketing would likely highly influcence the organic traffic, as well as email is not completely free (there are at least some operational as well probably very high licensing costs to partner with an email sending company/provider that can enable for high scale email sendout campaigns). Nevertheless - I believe the conclusion remains that basically a big share of the website traffic pie is brought by mostly free mediums.
 :::
 
-# TODO: Distribution of revenue share across countries
+# Distribution of revenue share across countries
 
 what is the distribution of revenue share for each medium across all countries ?
 
+I would like to see the distribution of the revenue shares across all counties, split per medium. I would like to see if there are some mediums with wide / high variance distribution for the revenue share, or conversely if revenue shares are tightly distributied around certain means with little variation.
+
 ::: panel-tabset
-## distribution of revenue share - per medium - across all countries
+## Histogram
 
 ```{r}
+#| label: hist-dist-revenue-share
 medium_country |>
   semi_join(
     by_country |> slice_max(order_by = revenue_country, n = 50),
     join_by(country)
   ) |>
-  # filter(country != "(not set)") |>
   mutate(
-    medium = case_when(
-      medium == "(none)"    ~ "unknown",
-      medium == "(not set)" ~ "unknown",
-      .default = medium
-    ),
     medium = fct_lump(medium, n = 7, w = revenue),
     medium = fct_reorder(medium, revenue)
   ) |>
   select(country, medium, revenue, revenue_country, revenue_share) |>
-
   ggplot(aes(revenue_share)) +
-  geom_histogram() +
+  geom_histogram(binwidth = 0.025) +
   facet_wrap(~ medium, scales = "free_y", ncol = 1, strip.position = "right")
 
 ```
 
-## like above in table form - with median values for revenue share across all countries
+## Tabulated Median values
+
+The medians from the above distributions in table form - shorter overview
 
 ```{r}
+#| label: table-medians-revenue-share
 medium_country |>
   semi_join(
     by_country |> slice_max(order_by = revenue_country, n = 50),
     join_by(country)
   ) |>
-  # filter(country != "(not set)") |>
   mutate(
-    medium = case_when(
-      medium == "(none)"    ~ "unknown",
-      medium == "(not set)" ~ "unknown",
-      .default = medium
-    ),
     medium = fct_lump(medium, n = 7, w = revenue),
     medium = fct_reorder(medium, revenue, .desc = T)
   ) |>
@@ -284,9 +723,12 @@ medium_country |>
   summarise(
     median_revenue_share = median(revenue_share),
     median_revenue_share = percent_format(accuracy = 0.01)(median_revenue_share)
-  )
+  ) |> 
+  datatable(options = list(dom = 't'))
 ```
 :::
+
+## Conclusion for this part
 
 Ok so far i think it is quite convincing picture that the main driver of revenue across all countries is referral. 2nd place is paid search / cpc with 8%.
 
@@ -298,22 +740,30 @@ since the client is a transport company (i imagine airline or train/bus company 
 
 Going out on a limb / perhaps bit too much reading the bottom of the coffee cup :-) I think that depending so much on referral might be "dangerous" for the client because referral can only get you so far i.e. existing customers referring the business to their friends and family. this does not sound like it would be "setup for scaling" i.e. in order to really scale up the business then it would be better to expand the organic / paid search / email marketing channels to be bigger engines of growth (but then again - we only have 1 year of data so this might indeed be the case - that these are indeed growing in the past years ?)
 
-# TODO: what is the revenue per transaction for the different channels ?
+# Revenue per transaction for the different channels ?
 
-Does cpc have higher r.p.t. than referral ?\
-Is any medium better than referral so it should be scaled ?
+Does cpc have higher r.p.t. than referral ? Is any medium better than referral so it should be scaled ?
+
+```{r}
+  medium_country |>
+  select(country, medium, revenue, transactions) |>
+  filter(transactions == 0) |> 
+  datatable(options = (list(dom = "t")))
+#  # lump together some low volume mediums  
+#  mutate(
+#    medium = fct_lump(medium, n = 7, w = revenue_per_transaction)
+#  )
+```
+
+::: panel-tabset
+## Bootstrap means
 
 ```{r}
 #| label: bootstrap-mean-revenue-per-transaction
-library("rsample")
-
-bootstrap_means <- medium_country |>
+bootstrap_means <- 
+  medium_country |>
   select(country, medium, revenue, transactions) |>
-  # filter out low volume rows
-  filter(
-    revenue > 500,
-    transactions > 30
-  ) |>
+  filter(revenue > 0, transactions > 0) |> 
   mutate(revenue_per_transaction = revenue / transactions) |>
   # lump together some low volume mediums  
   mutate(
@@ -321,7 +771,8 @@ bootstrap_means <- medium_country |>
     medium = fct_reorder(medium, revenue_per_transaction, .desc = T)
   ) |> 
   # bootstrap 
-  bootstraps(times = 10000, strata = medium) |> 
+  # TODO: increase times before final push !
+  bootstraps(times = 10, strata = medium) |> 
   mutate(
     boot_means = map(splits, ~ {
       # calculate means grouped by medium
@@ -373,12 +824,14 @@ bootstrap_means_wide |>
     legend.position = "none",
     plot.title.position = "plot"
     )
+```
 
+## Referral vs. Organic - test for significance
 
-# test for signif.difference between 
-# referral vs. organic bootstrap dist. of 
-# revenue per transaction means
+test for signif.difference between referral vs. organic bootstrap distribution of revenue per transaction means
 
+```{r}
+#| label: referral-vs-organic-signif-test
 rev_per_trans_referral <- bootstrap_means |> 
   filter(medium == "referral") |>
   pull(mean_revenue_per_transaction)
@@ -393,23 +846,134 @@ t.test(
   alternative = "greater"
 )
 ```
+:::
 
-# TODO: Top channels
+# High volume free traffic
 
-Which channels are the most effective at driving traffic to your website ?
+in countries where cpc *spend* is low (\~ cpc traffic/sessions as proxy instead)
 
-## TODO: Percentage of new customers ?
+we look at all organic channels referral, organic, none \--\> traffic and conv.rate
 
-How much of your website traffic represents new visitors ?
+and if it's already good - we're not doing anything here
 
-## TODO: Other vs. Organic Search
+```{r}
+paid_mediums <- c(
+  "cpc",
+  "display",
+  "paid-social",
+  "s-cpm",
+  "cpc,cpc",
+  "Social"
+)
+free_mediums <- c(
+  "(none)",
+  "referral",
+  "organic",
+  "email",
+  "affiliate",
+  "banner"
+)
 
-How do other channels compare to Organic Search Traffic ?
+free_vs_paid_by_country <- 
+  medium_country |> 
+  semi_join(
+    by_country |> slice_max(order_by = revenue_country, n = 50),
+    join_by(country)
+  ) |>
+  filter(medium %in% c(paid_mediums, free_mediums)) |> 
+  mutate(
+    medium = case_when(
+      medium %in% paid_mediums ~ "paid",
+      medium %in% free_mediums ~ "free"
+    )
+  ) |> 
+  group_by(country, medium) |> 
+  summarise(
+    sessions = sum(sessions),
+    mean_conv_rate = mean(ecommerce_conversion_rate)
+  ) |> 
+  mutate(perc_sessions = sessions / sum(sessions)) |> 
+  ungroup()
 
-# TODO: Sessions vs duration
+free_vs_paid_by_country
+```
 
-Compare the average amount of time users spend on your website to the number of sessions.
+```{r}
+countries_rank_by_low_free_sessions <- free_vs_paid_by_country |> 
+  pivot_wider(
+    id_cols = country,
+    names_from = medium,
+    names_sep = "_",
+    values_from = c(perc_sessions, mean_conv_rate)
+  ) |>
+  mutate(
+    perc_sessions_free_rank = dense_rank(perc_sessions_free)
+  ) |>
+  arrange(perc_sessions_free_rank)
 
-# TODO: Conversion rate
+countries_rank_by_low_free_sessions
+```
 
-How effective is your website at converting visitors to leads or signups ?
+Pyramid plot where countries are in the middle. Countries are ordered by the free traffic rank.
+
+Right side are median conversion rates for paid traffic
+
+Left side are median conversion rates for free traffic.
+
+```{r}
+free_vs_paid_by_country |> 
+  select(country, medium, mean_conv_rate) |> 
+  mutate(
+    mean_conv_rate = ifelse(
+      medium == "paid",
+      mean_conv_rate,
+      -mean_conv_rate
+    )
+  ) |> 
+
+  left_join(
+    {
+      countries_rank_by_low_free_sessions |> 
+        select(country, perc_sessions_free_rank)
+    },
+    join_by(country)
+  ) |>
+
+  mutate(country = fct_reorder(country, perc_sessions_free_rank)) |> 
+  filter(perc_sessions_free_rank <= 50) |> 
+  ggplot(aes(x = mean_conv_rate, y = country, fill = medium)) + 
+  geom_col() +
+  scale_x_continuous(labels = ~ percent_format()(abs(.x))) +
+  facet_grid(~ medium, scales = "free")
+```
+
+low free traffic - but - high free conversion rates
+
+```{r}
+countries_rank_by_low_free_sessions |> 
+  filter(country != "(not set)") |> 
+  mutate(
+    is_on_boundary = (perc_sessions_free < 0.85) & (mean_conv_rate_free > 0.022),
+    country_label = ifelse(is_on_boundary, country, NA_character_),
+  ) |> 
+  ggplot(aes(x = mean_conv_rate_free, y = perc_sessions_free, colour = is_on_boundary)) +
+  geom_point() +
+  geom_label(aes(label = country_label)) +
+  theme(
+    legend.position = "none"
+  ) +
+  scale_x_continuous(breaks = seq(0, 0.1, 0.01), labels = label_percent(accuracy = 1)) +
+  scale_y_continuous(breaks = seq(0, 1, 0.05),   labels = label_percent(accuracy = 1))
+```
+
+# TODOs
+
+Top channels Which channels are the most effective at driving traffic to your website ?
+
+Percentage of new customers ? How much of your website traffic represents new visitors ?
+
+Other vs. Organic Search How do other channels compare to Organic Search Traffic ?
+
+Sessions vs duration Compare the average amount of time users spend on your website to the number of sessions.
+
+Conversion rate How effective is your website at converting visitors to leads or signups ?

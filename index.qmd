@@ -1,10 +1,18 @@
 ---
 number-sections: false
+echo: false
+code-fold: true
+monofont: Fira Code Light
+execute:
+  warning: false
+  code-fold: true
 ---
 
 # Introduction
 
-Hello and welcome to this project where I tried to explain and nicely present my analysis, thoughts, comments ... around the interview task that I got from Ivan, which we will discuss in our next chat.
+Hello and welcome to this project in which I tried to explain and present my analysis and thoughts around the interview task that I got from Ivan.
+
+I hope you find it interesting and I am looking forward to presenting it and discussing it with you.
 
 ::: {.callout-note icon="false"}
 ## Task overview
@@ -22,7 +30,7 @@ Due to recent market changes they are looking into optimising their marketing ef
 Their activities are in some markets mostly offline, while in others are just online.
 :::
 
-The main points are:
+The main goals are:
 
 -   scale markets easily
 -   while keeping long term profitability
@@ -30,7 +38,7 @@ The main points are:
 
 ## Callout
 
-While one of the main points is around keeping *profitability* no data on marketing spend was provided which is essential in order to determine this.
+While one of the main points is around keeping *profitability* no data on marketing spend was provided which is essential in order to determine this (for the paid channels like cpc).
 
 Nevertheless, the data provided contained many interesting insights already - and besides that, I think it should not be too hard to also add this aspect to the existing analysis.
 
@@ -43,7 +51,7 @@ The date ranges in both files judging from the header comments and file names is
 
 # Structure of this doc
 
-You can find a TLDR / [Executive Summary](summary.qmd#Executive%20summary) section. This is a condensed format of the main takeaways that tries to convey the message with few charts or tables and is suitable for a quick and short overview.
+You can find a [Summary](summary.qmd#Summary) section. This is a condensed format of the main takeaways that tries to just convey the message, links further to charts or tables where the point is displayed in some more detail - and is suitable for a quick and short overview.
 
 The individual sections that look at the different views of the data can be found in:
 

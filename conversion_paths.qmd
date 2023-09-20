@@ -1,1 +1,575 @@
+---
+monofont: Fira Code Light
+echo: true
+code-fold: true
+---
+
 # Conversion paths
+
+## Summary
+
+TODO: add links to most important sections below.
+
+# Data exploration
+
+In this section I would like to explore the conversion paths file
+
+-   take a look at the data quality
+-   check the distribution of the conversion path lenghts - check what is the most usual length of touchpoints that customers go through before converting
+-   and lastly - fit a Markov Model and see what the transition network between the different mediums shows. One interesting thing I expect to come out is the Removal Effects that this model provides - which would be the unbiased / more objective importance weights of the mediums in the overall customer journey
+    -   and compare this to the results I got from the analysis of the country / medium file
+
+```{r}
+#| label: setup
+#| echo: false
+#| warning: false
+#| message: false
+library("here")
+library("fs")
+library("DT")
+library("glue")
+library("janitor")
+library("scales")
+library("tidyverse")
+
+data_dir <- "data"
+file_name <- "conversion_paths.csv"
+
+conv_paths_raw <-
+  read_csv(path_join(c(here(), data_dir, file_name))) |>
+  clean_names()
+```
+
+## Conversions are all 1s ?
+
+Are all conversions a single `1` or is there variety in the data ?
+
+```{r}
+#| label: explore-conversions-1
+#| echo: false
+#| warning: false
+#| message: false
+conv_paths_raw |>
+  select(-medium_path) |> 
+  head(10) |> 
+  datatable(options = list(dom = "t"))
+```
+
+Seems like most of conv. are 1s but perhaps there are some other values ?
+
+```{r}
+#| label: explore-conversions-2
+summary(conv_paths_raw$conversions)
+```
+
+The summary shows that most are 1s but there are other values at the right tail end of the distribution. There are no 0 conversions, which is good.
+
+I can convert them to integer numbers.
+
+```{r}
+#| label: convert-conversions-to-integers
+conv_paths <- conv_paths_raw |>
+  mutate(conversions = as.integer(conversions))
+```
+
+## Value always in EUR ?
+
+Separate the EUR from the numeric value and split them separately to check how they look like.
+
+```{r}
+#| label: explore-values-1
+conv_paths <- conv_paths |>
+  mutate(
+    value_splits = str_split(value, " ", n = 2),
+    currency = map_chr(value_splits, first),
+    value = {
+      map_chr(value_splits, nth, n = 2) |>
+        str_remove_all(",") |>
+        parse_number()
+    },
+    value_splits = NULL
+  )
+```
+
+Is the currency of the value always in EUR ?
+
+```{r}
+#| label: explore-values-2
+conv_paths |> count(currency)
+```
+
+Yes, great I can safely drop this.
+
+```{r}
+#| label: explore-values-3
+conv_paths <- conv_paths |> select(-currency)
+```
+
+How does `value` look like ?
+
+```{r}
+#| label: explore-values-4-a
+# 1
+summary(conv_paths$value)
+```
+
+The summary shows that value does have `0`s , half of the data values are `<= 229` and the right end of the tail looks like it is quite long / heavy.
+
+How does this right-end of the tail look like ?
+
+```{r}
+#| label: explore-values-4-b
+quantile(conv_paths$value, seq(0.9, 1, 0.01)) |> comma()
+```
+
+Looks like we have suuuper heavy tail with some extreme values in the top percentiles.
+
+I would like to see the top 10 medium paths ordered by descending conversion value.
+
+```{r}
+#| label: explore-values-5
+conv_paths |>
+  slice_max(order_by = value, n = 10) |> 
+  datatable(options = list(dom = "t"))
+```
+
+It looks like there are some "power" paths that provide massive part of the conversions / value.
+
+Given the insights from the country/medium analysis - it's not surprising that the single `referral` touchpoint is right at the top - with other paths where `referral` plays a role being also in the top 10.
+
+Seeing also `(none)` and `cpc` in the top 10 makes me more curious about the Markov Model - I expect them to gain on importance in that overall view (as compared to the last non-direct view of the country/medium file).
+
+One more thing I would like to check is the relationship of `(conversion, value)` pairs.
+
+I will start with a simple scatterplot of their relationship.
+
+```{r}
+#| label: explore-values-6
+# how do conversions-value pairs look like ?
+ggplot(conv_paths, aes(conversions, value)) + geom_point()
+```
+
+Not entirely sure what to think of this big hole in the middle, at first glance it looks bit unrealistic ?
+
+Wondering if some scale-changes would show something ? Will try to log both axis
+
+```{r}
+#| label: explore-values-7
+ggplot(conv_paths, aes(conversions, value)) +
+  geom_point() +
+  scale_x_log10() +
+  scale_y_log10()
+```
+
+Hm, ok ... what catches the attention is the last warning about infinite values. This indicates that there are `0` value conversions ?
+
+```{r}
+#| label: explore-values-8
+conv_paths |>
+  filter(value < 1) |> 
+  datatable(options = list(dom = "t"))
+```
+
+Yes that is the case indeed ... not sure if this is a "hiccup" in the data / export ?
+
+What percentage of the rows have `0` value ?
+
+```{r}
+#| label: explore-values-9
+conv_paths |>
+  count(value == 0) |>
+  mutate(perc = n / sum(n))
+```
+
+about 4% of the rows are `0` value. How about in terms of conversions - what % of the conversions (which are all `>= 1`) have `0` value ?
+
+```{r}
+#| label: explore-values-10
+conv_paths |>
+  group_by(value == 0) |>
+  summarise(n = sum(conversions)) |>
+  mutate(perc = n / sum(n))
+```
+
+Since it's only 4% of the data and 0.12% in terms of conversions then i think it's safe to simply remove these rows. It does not make sense to me to have `conversion = 1 & value = 0` - perhaps it's a cancellation ? In any case it shouldn't cause any problems I assume.
+
+```{r}
+#| label: explore-values-11
+conv_paths <- conv_paths |> filter(value > 0)
+```
+
+## What are all possible mediums represented ?
+
+Last thing i would like to check all the different mediums reprensented in this data export
+
+```{r}
+#| label: explore-mediums-1
+mediums <- conv_paths |>
+  select(medium_path) |>
+  separate_wider_delim(
+    medium_path,
+    delim = " > ",
+    too_few = "align_start",
+    names_sep = "_"
+  )
+
+mediums |> map(unique)|> flatten_chr() |> unique() |> sort()
+```
+
+From a first look it looks like the same mediums as in the country/medium file, nothing super interesting here.
+
+# Distribution of path lenghts
+
+What might be also interesting to look at is the distribution of path lengths and - out of curiosity - i want to check what is the most common first medium touchpoint usually.
+
+Maybe an idea would be to come up with some simple rules for buckets and see if these 2 differ
+
+-   the bulk of the path lenghts distribution would be centeres around some value `L` e.g.
+-   however - perhaps the bulk of the *value* is brought by another bucket e.g. `L + 10` i.e. the bulk of the conversions are around `L` but they are lower value conversions than bucket `L + 10`
+
+These are some of the questions I expect to perhaps show some interesting things.
+
+How does the distribution of path lengths look like ?
+
+```{r}
+#| label: explore-path-lenghts-1
+path_lengths <- conv_paths |>
+  select(medium_path) |>
+  mutate(
+    path_splits = str_split(medium_path, " > "),
+    path_length = map_int(path_splits, length),
+    first_touchpoint_medium = map_chr(path_splits, first)
+  ) |>
+  select(path_length, first_touchpoint_medium)
+
+ggplot(path_lengths, aes(path_length)) + geom_histogram(binwidth = 1)
+```
+
+It's heavily right skewed with extremely long path lengths - apparently conversion paths of `> 100` steps are also possible, although very unlikely. I want to zoom in around the peak of the distribution and see where it lies.
+
+```{r}
+#| label: explore-path-lenghts-2
+ggplot(path_lengths, aes(path_length)) +
+  geom_histogram(binwidth = 1) +
+  xlim(0, 50)
+```
+
+It is centered somewhere around `7-9.`
+
+How does the right end of the distribution look like ?
+
+```{r}
+#| label: explore-path-lenghts-3
+quantile(path_lengths$path_length, probs = seq(0.50, 1.00, 0.05))
+```
+
+-   half of the conversions take 10 touchpoints to convert
+-   90% of the conversions take \<= 26 touchpoints to convert
+
+What is the most common first medium ? This one I picked out of curiosity to see how does the usual customer journey starts.
+
+```{r}
+#| label: explore-path-lenghts-4
+path_lengths |>
+  count(first_touchpoint_medium, sort = T) |>
+  mutate(perc = percent_format(accuracy = 0.001)(n / sum(n)))
+```
+
+Again perhaps unsurprisingly as I saw in the country/medium analysis - `referral` is the 1st touchpoint for people \~45% of the time being the "power" medium drivers of customers - with `(none)` and `cpc` following behind.
+
+Are there any duplicate rows in the data ?
+
+```{r}
+#| label: explore-path-lenghts-5
+conv_paths$medium_path |> duplicated() |> sum()
+```
+
+yes, so this means i have multiple rows with same medium path and different conversions and values, so I need to re-group-and-summarise by medium path the duplicates.
+
+```{r}
+#| label: explore-path-lenghts-6
+conv_paths <- conv_paths |>
+  group_by(medium_path) |>
+  summarise(across(c(conversions, value), sum)) |>
+  ungroup()
+```
+
+At this point I am content with the checks, cleaning and format of the file.
+
+# Markov model
+
+I would like to fit a order-1 Markov Model to the conversion paths.
+
+```{r}
+#| label: markov-model-1
+library("ChannelAttribution")
+
+markov_mod <- markov_model(
+  conv_paths,
+  var_path = "medium_path",
+  var_conv = "conversions",
+  var_value = "value",
+  out_more = T
+)
+
+markov_mod
+```
+
+## Visualise transition network
+
+Select only the top 10 to de-clutter the network
+
+```{r}
+top_mediums <- markov_mod$result |> 
+  slice_max(order_by = total_conversions, n = 12)
+```
+
+```{r}
+#| label: channel-indexes-?--TODO:-REMOVE
+
+# proof that channels are cross-referenced between
+# result and transition_matrix
+#
+# conv_paths |> filter(str_detect(medium_path, "zalo"))
+# markov_mod$transition_matrix |> tail(2)
+# conv_paths |> head(1)
+```
+
+```{r}
+#| label: transition-matrix-prepare-for-plot
+
+# channel index <-> name
+channel_index_to_name <- markov_mod$result |>
+  as_tibble() |>
+  select(channel_name) |>
+  rownames_to_column("channel_index") |>
+  deframe()
+
+
+transition_matrix <- markov_mod$transition_matrix |>
+  as_tibble() |>
+  mutate(
+    channel_from = ifelse(
+      channel_from %in% c("(start)", "(conversion)"),
+      channel_from,
+      channel_index_to_name[ channel_from ]
+    ),
+    channel_to = ifelse(
+      channel_to %in% c("(start)", "(conversion)"),
+      channel_to,
+      channel_index_to_name[ channel_to ]
+    )
+  ) |> 
+  semi_join(
+    top_mediums,
+    join_by(channel_from == channel_name)
+  ) |> 
+  group_by(channel_from) |> 
+  slice_max(order_by = transition_probability, n = 3, with_ties = F) |> 
+  ungroup()
+
+```
+
+## Heatmap Transition Matrix
+```{r}
+transition_matrix |> 
+  ggplot(aes(x = channel_from, y = channel_to, fill = transition_probability)) +
+  geom_tile() +
+  scale_fill_distiller(palette = "RdPu", direction = 1)
+```
+
+
+
+```{r}
+cols <- c("#e7f0fa", "#c9e2f6", "#95cbee", "#0099dc", "#4ab04a", "#ffd73e", "#eec73a",
+          "#e29421", "#e29421", "#f05336", "#ce472e")
+t <- max(transition_matrix$transition_probability)
+ 
+ggplot(transition_matrix, aes(y = channel_from, x = channel_to, fill = transition_probability)) +
+        theme_minimal() +
+        geom_tile(colour = "white", width = .9, height = .9) +
+        scale_fill_gradientn(colours = cols, limits = c(0, t),
+                             breaks = seq(0, t, by = t/4),
+                             labels = c("0", round(t/4*1, 2), round(t/4*2, 2), round(t/4*3, 2), round(t/4*4, 2)),
+                             guide = guide_colourbar(ticks = T, nbin = 50, barheight = .5, label = T, barwidth = 10)) +
+        geom_text(aes(label = round(transition_probability, 2)), fontface = "bold", size = 4) +
+        theme(legend.position = 'bottom',
+              legend.direction = "horizontal",
+              panel.grid.major = element_blank(),
+              panel.grid.minor = element_blank(),
+              plot.title = element_text(size = 20, face = "bold", vjust = 2, color = 'black', lineheight = 0.8),
+              axis.title.x = element_text(size = 24, face = "bold"),
+              axis.title.y = element_text(size = 24, face = "bold"),
+              axis.text.y = element_text(size = 8, face = "bold", color = 'black'),
+              axis.text.x = element_text(size = 8, angle = 90, hjust = 0.5, vjust = 0.5, face = "plain")) +
+        ggtitle("Transition matrix heatmap")
+```
+
+## Interactive wobbly network
+```{r}
+#| label: visualise-network-1
+library("visNetwork")
+
+transition_matrix_short <-
+  transition_matrix |>
+  arrange(desc(transition_probability)) |>
+  filter(transition_probability > 0.7) |>
+  mutate(
+    label = percent_format(accuracy = 0.01)(transition_probability),
+    arrows = "to",
+    dashes = T
+  ) |>
+  rename(from = channel_from, to = channel_to)
+
+nodes <-
+  unique(c(transition_matrix_short$from, transition_matrix_short$to)) |>
+  as_tibble()
+
+nodes <- nodes |>
+  mutate(id = value) |>
+  rename(title = value) |>
+  mutate(label = title)
+
+visNetwork(
+  nodes,
+  transition_matrix_short,
+  height = "1000px",
+  width = "100%",
+)
+```
+
+
+## Static plot network
+```{r}
+library("igraph")
+
+top_mediums <- c(
+  "(start)",
+  "(conversion)",
+  "(none)",
+  "(not set)",
+  "cpc",
+  "email",
+  "organic",
+  "referral"
+)
+
+transition_matrix <- transition_matrix |> 
+  filter(
+    channel_from %in% top_mediums,
+    channel_to %in% top_mediums
+  )
+
+network <- graph_from_data_frame(d = transition_matrix, directed = T)
+
+V(network)$color <- case_match(
+  V(network)$name,
+   "(start)"       ~ "orange1",
+    "(conversion)" ~ "blue1",
+    "(none)"    ~ "green1",
+    "email"     ~ "green1",
+    "navbar"    ~ "green1",
+    "organic"   ~ "green1",
+    "referral"  ~ "green1",
+    "(not set)" ~ "red1",
+    "cpc"       ~ "red1",
+    "s-cpm"     ~ "red1"
+)
+
+plot(
+  network,
+  layout = layout_with_fr,
+  edge.arrow.size = 0.2,
+  edge.curved = F,
+  edge.label = percent_format(accuracy = 0.1)(E(network)$transition_probability)
+)
+
+```
+
+## Removal Effects
+
+```{r}
+#| label: removal-effects-1
+as_tibble(markov_mod$removal_effects) |>
+  arrange(desc(removal_effects_conversion_value))
+```
+
+# Heuristic Model
+
+```{r}
+heuristic_mod <- heuristic_models(
+  conv_paths,
+  var_path = "medium_path",
+  var_conv = "conversions",
+  var_value = "value"
+)
+
+markov <- markov_mod$result |> 
+  rename(
+    markov_conversions = total_conversions,
+    markov_conversion_value = total_conversion_value
+  )
+
+heuristic <- heuristic_mod |>
+  rename_with(
+    .cols = c(everything(), -channel_name),
+    str_remove,
+    pattern = "touch_"
+  )
+```
+
+```{r}
+
+top_mediums <- 
+  markov_mod$result |> 
+  slice_max(order_by = total_conversions, n = 7)
+
+compare_models <- 
+  left_join(markov, heuristic, join_by(channel_name)) |> 
+  semi_join(top_mediums, join_by(channel_name)) |> 
+  select(channel_name, ends_with("value")) |> 
+  rename_with(
+    .cols = c(everything(), -channel_name),
+    str_remove,
+    pattern = regex("(_conversion)*(_value)+")
+  ) |> 
+  pivot_longer(
+    cols = -channel_name,
+    names_to = "model",
+    values_to = "value"
+  ) |> 
+  mutate(
+    channel_name = fct_reorder(channel_name, value, sum, .desc = T)
+  )
+
+compare_models |> 
+  ggplot(aes(x = channel_name, y = value, fill = model)) +
+  geom_col(position = "dodge")
+```
+
+
+```{r}
+compare_models <- 
+  left_join(markov, heuristic, join_by(channel_name)) |> 
+  semi_join(top_mediums, join_by(channel_name)) |> 
+  select(channel_name, ends_with("conversions")) |> 
+  rename_with(
+    .cols = c(everything(), -channel_name),
+    str_remove,
+    pattern = "_conversions"
+  ) |> 
+  pivot_longer(
+    cols = -channel_name,
+    names_to = "model",
+    values_to = "conversions"
+  ) |> 
+  mutate(
+    channel_name = fct_reorder(channel_name, conversions, sum, .desc = T)
+  )
+
+
+compare_models |> 
+  ggplot(aes(x = channel_name, y = conversions, fill = model)) +
+  geom_col(position = "dodge")
+```
+

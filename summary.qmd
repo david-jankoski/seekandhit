@@ -1,1 +1,27 @@
-# Executive summary
+---
+number-sections: false
+echo: false
+code-fold: true
+monofont: Fira Code Light
+execute:
+  warning: false
+  code-fold: true
+---
+
+# Summary
+
+-   main profile of marketing channel mix across countries
+-   most profitable channels are
+-   view from markov model
+-   market penetration in various countries
+-   high volume free traffic
+
+## Market Penetration
+
+Looking at the data at an aggregated country level in terms of market penetration, making some high-level, **but bold**, assumptions about the current state and the marketing playbook used in certain European countries - it could be that by using the same marketing tactics as in countries like Italy and Spain - the client could potentially achieve higher market presence and therefore higher revenue in countries like France and Germany.
+
+A short walkthrough of this reasoning (which needs data on unique number of customers from a country - in order to be completely correct) can be found [here](country.qmd#market-penetration). In consultations with the client we could identify countries that are very similar / comparable in terms of general size / population as well as marketing strategy and investments from our client's side - in order to identify potential candidates for a marketing push / expansion.
+
+## Recommendations
+
+-   japan, australia mkt mix (TODO: add link)

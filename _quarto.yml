@@ -8,15 +8,18 @@ website:
   reader-mode: true
   navbar:
     background: "#2e3f58"
-    left:
-      - href: index.qmd
-        text: "Introduction"
+    # left:
+    #   - href: index.qmd
+    #     text: "Introduction"
   sidebar:
     style: "floating"
     contents:
-      - section: "Sections"
+      - section: "Task overview"
         contents:
+          - index.qmd
           - summary.qmd
+      - section: "Analysis"
+        contents:
           - country.qmd
           - country_medium.qmd
           - conversion_paths.qmd
@@ -30,5 +33,7 @@ website:
         href: https://github.com/david-jankoski/seekandhit
 
 format:
-  bookup-html+dark:
+  bookup-html:
     embed-fonts: true
+    monofont: Fira Code Light
+    page-layout: full

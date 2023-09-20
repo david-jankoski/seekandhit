@@ -9,7 +9,13 @@ execute:
 
 # Country
 
-In this section I will try to look at the `medium_country` data from a level higher - aggregated per country. I would like to see first a high-level intro to the data, see which countries drive the most users and revenue, try to identify a subset on which I can focus the analysis and lastly - try to give an advise to our client by just looking at this level.
+## Summary
+
+TODO: add links to most important sections below
+
+## Data exploration
+
+In this section I will try to look at the `medium_country` data from a higher level - aggregated per country. I would like to see first an intro to the data, which countries drive the most users and revenue, try to identify a subset on which I can focus the analysis and lastly - try to give an advice to our client by just looking at this level.
 
 ```{r}
 #| label: setup
@@ -32,7 +38,7 @@ medium_country_raw <- read_csv(
 n_countries_total <- medium_country_raw$country |> unique() |> length()
 ```
 
-The source file contains data on `r n_countries_total` in total and e.g. looks like this for Croatia
+The source file contains data on `r n_countries_total` countries in total and e.g. looks like this for Croatia
 
 ```{r}
 #| label: show-example-raw-data
@@ -43,7 +49,7 @@ medium_country_raw |>
   datatable()
 ```
 
-The data is on country / medium level so I would like to collapse it down to just the country level grouping first and compute some additional high-level metrics.
+The data is on country / medium level so I would like to collapse it down to just the country level grouping and compute some additional high-level metrics.
 
 ```{r}
 #| label: aggregate-to-country-level
@@ -70,10 +76,18 @@ by_country <-
     new_users_share = new_users / users
   )
 
-by_country |> filter(country == "Croatia")
+
+by_country |>
+  filter(country == "Croatia") |>
+  mutate(across(is.numeric, ~ round(.x, 3))) |> 
+  datatable(options = list(dom = 't'))
 ```
 
-Are there countries with very very low volume of transactions or users ?
+## Low volume countries
+
+Are there countries with very very low volume of users, transactions or revenue ?
+
+I would pick `users, transactions, revenue` as most important metrics and look at their quantiles.
 
 ```{r}
 #| label: important-metrics-quantiles
@@ -83,53 +97,114 @@ by_country |>
   map(quantile, probs = seq(0, 1, 0.05))
 ```
 
--   about 15% of the countries have less than 500 users - which seems quite low for the whole of 2022
--   setting \~ 20,000 as limit for revenue would cut off the lower 20th percentile of countries - which seems also good (perhaps even too low given that the upper percentiles are in 100,000s of euros)
+-   about \~20% of the countries have less than \~1000 users
+-   in terms of transactions it looks like \~45% of the countries have less than \~100 transactions
+-   in terms of revenue taking \~20,000€ as cutoff point would remove \~25% of the countries
 
-Based on this quick checks I am inclined to set a very simple rule `revenue > 20,000` . I can go back to revise this later if needed - as well as look more into the lower revenue countries to see if there is something to be said for them separately.
+Arguably these are random cut-off points that I just picked and make sense to me - such choices are definitely debatable. My goal is to reduce the noise in the data and focus on the bigger players where potential changes in the marketing strategy would make sense (e.g. compared to low volume countries where suggesting changes in the marketing strategy would have limited impact).
 
-The removed countries seem to be indeed small countries.
+Based on this quick checks I am inclined to set some simple rules like
+
+`revenue <= 20,000  or  users <= 1,000  or  transactions <= 100`
+
+I can go back to revise this later if needed, in case there is still lots of noise or conversely i am missing some granularity, as well as look more into the lower revenue countries to see if there is something to be said for them separately. (TODO: link to appendix for this check ?)
+
+The potentially-to-be-removed countries seem to be indeed small countries.
 
 ```{r}
-#| label: show-low-revenue-countries
+#| label: show-low-volume-countries-1
 #| echo: true
-by_country |> filter(revenue < 20000)
+by_country |>
+  filter(
+    (revenue <= 20000) | (users <= 1000) | (transactions <= 100)
+  ) |>
+  select(country, users:revenue) |> 
+  arrange(desc(revenue)) |> 
+  datatable()
+```
+
+How many countries will be removed with this rule ? How much of the revenue do they contribute to ?
+
+```{r}
+#| label: show-low-volume-countries-2
+#| echo: true
+by_country |> 
+  mutate(
+    too_low_volume = {
+      (revenue <= 20000) | (users <= 1000) | (transactions <= 100)
+    }
+  ) |> 
+  group_by(too_low_volume) |> 
+  summarise(
+    n_countries = n(),
+    revenue = sum(revenue)
+  ) |> 
+  ungroup() |> 
+  mutate(
+    perc_revenue   = round(revenue / sum(revenue), 3),
+    perc_countries = round(n_countries / sum(n_countries), 3)
+  ) |> 
+  datatable(options = list(dom = 't'))
+```
+
+I would be removing 104 countries \~43% of the total number but half a percent in terms of revenue. This seems ok to me (for now - perhaps to be revised later).
+
+### Remove low volume countries
+
+```{r}
+#| label: remove-low-volume-countries
+#| echo: true
+by_country <- by_country |> 
+  filter(
+    (revenue > 20000) & (users > 1000) & (transactions > 100)
+  )
 ```
 
 ## Revenue map
 
-Going to try and plot the revenue, transactions, users on a map of the world - just to see how does it look like, where is the volume concentrated etc.
+I'm curious to see how the business of the client looks like more visually. I would like to plot the world in terms of buckets of revenue (split roughly and evenly in 7 buckets) in order to see how the "concentration" looks like.
 
 ```{r}
 #| label: revenue-map
+#| warning: false
+#| message: false
 #| column: screen
-#| out-width: 70%
+#| out-width: 60%
 #| fig-format: svg
 library("rworldmap")
 
+# split revenue into buckets
+by_country <- 
+  by_country |> 
+  mutate(revenue_ntile = ntile(revenue, n = 7))
+
+# map
 by_country_map <- joinCountryData2Map(
   by_country,
   joinCode = "NAME",
   nameJoinColumn = "country"
 )
-mapCountryData(by_country_map, nameColumnToPlot = "revenue")
+mapCountryData(
+  by_country_map,
+  nameColumnToPlot = "revenue_ntile",
+  numCats = 5,
+  colourPalette = RColorBrewer::brewer.pal(n = 8, name = "Reds")[-1],
+  mapTitle = "Map in terms of revenue buckets"
+)
 ```
 
-I will start with the following simple rule - either revenue more than €20,000 or users or transactions volume b bigger than 500 (i will come back to adjust these in case there is still lots of noise or conversely i am missing some granularity)
+-   Western Europe, Russia, Japan, Australia, North Americas and Brazil are top tiers
+-   The middle tiers would be China, India, Argentina, Chile, South Africa, Turkey
+-   Bottom tiers would be most of North Africa and some of the Middle East
 
-```{r}
-#| label: remove-low-revenue-countries
-#| echo: true
-#| code-fold: false
-by_country <- by_country |> 
-  filter(
-    (revenue > 20000) | (users > 500) | (transactions > 500)
-  )
-```
+I *expect* the map to look very similar if we plot \# of users, sessions or transactions instead.
 
-## Which countries "drive" the most ?
+# Which countries drive the most ?
 
-Which countries drive the most users ?
+Next I would like to take a look at the main "drivers" in terms of all the main metrics. I would like to make simple plots where countries would be ordered by their volume with respect to the main metrics.
+
+::: panel-tabset
+## Users
 
 ```{r}
 #| label: most-users-plot
@@ -138,17 +213,18 @@ by_country |>
   slice_max(order_by = users, n = 30) |> 
   mutate(country = fct_reorder(country, users)) |> 
   ggplot(aes(x = users, y = country)) +
-  geom_col() +
+  geom_col(fill = "mediumpurple4") +
   scale_x_continuous(labels = comma_format(), expand = c(0, 0.3)) +
   labs(
     title = "Which countries drive the most users ?",
     x = "# Users",
     y = NULL
   ) +
-  theme_minimal()
+  theme_minimal() +
+  theme(plot.title.position = "plot")
 ```
 
-It seems that it is similar for new users.
+## New Users
 
 ```{r}
 #| label: most-new-users-plot
@@ -157,17 +233,38 @@ by_country |>
   slice_max(order_by = new_users, n = 30) |> 
   mutate(country = fct_reorder(country, new_users)) |> 
   ggplot(aes(x = new_users, y = country)) +
-  geom_col() +
+  geom_col(fill = "mediumpurple4") +
   scale_x_continuous(labels = comma_format(), expand = c(0, 0.3)) +
   labs(
     title = "Which countries drive the most new users ?",
     x = "# New Users",
     y = NULL
   ) +
-  theme_minimal()
+  theme_minimal() +
+  theme(plot.title.position = "plot")
 ```
 
-And I expect the same picture more or less for revenue
+## Transactions
+
+```{r}
+#| label: most-transactions-plot
+#| echo: true
+by_country |> 
+  slice_max(order_by = transactions, n = 30) |> 
+  mutate(country = fct_reorder(country, transactions)) |> 
+  ggplot(aes(x = transactions, y = country)) +
+  geom_col(fill = "mediumpurple4") +
+  scale_x_continuous(labels = comma_format(), expand = c(0, 0.3)) +
+  labs(
+    title = "Which countries drive the most transactions ?",
+    x = "# Transactions",
+    y = NULL
+  ) +
+  theme_minimal() +
+  theme(plot.title.position = "plot")
+```
+
+## Revenue
 
 ```{r}
 #| label: most-revenue-plot
@@ -176,19 +273,28 @@ by_country |>
   slice_max(order_by = revenue, n = 30) |> 
   mutate(country = fct_reorder(country, revenue)) |> 
   ggplot(aes(x = revenue, y = country)) +
-  geom_col() +
+  geom_col(fill = "mediumpurple4") +
   scale_x_continuous(labels = comma_format(), expand = c(0, 0.3)) +
   labs(
     title = "Which countries drive the most revenue ?",
     x = "€ Revenue",
     y = NULL
   ) +
-  theme_minimal()
+  theme_minimal() + 
+  theme(plot.title.position = "plot")
 ```
+:::
 
-I noticed something interesting here - Lithuania which was one of the top drivers for (new) users - in terms of revenue dropped significantly. I also have the sense that Australia - which was not even on the top 30 charts in terms of (new) users - jumped straight to the middle when we switched to revenue-view.
+It seems that it is quite similar across the main metrics with the usual top countries driving the most (new) users, transactions and revenue.
 
-I would like to check this bit more in detail by ranking the countries with respect to these metrics and checking a bit the difference in these ranks.
+## Countries that swap ranks drastically ?
+
+However I noticed something interesting here:
+
+-   Lithuania which was one of the top drivers for (new) users - in terms of revenue dropped significantly
+-   I also have the sense that Australia - which was not even on the top 20 charts in terms of (new) users - jumped straight to the middle when we switched to revenue-view
+
+I would like to check this in a bit more detail by ranking the countries with respect to these metrics and checking the difference in these ranks.
 
 ```{r}
 #| label: country-ranks
@@ -221,7 +327,7 @@ country_ranks |>
     users_to_revenue_rank_ratio = users_rank / revenue_rank
     ) |> 
   filter(
-    ranks_diff > 20 | users_to_revenue_rank_ratio >= 2
+    (ranks_diff > 20) | (users_to_revenue_rank_ratio >= 2)
     ) |> 
   datatable()
 ```
@@ -229,15 +335,9 @@ country_ranks |>
 Indeed it seems there are some interesting cases here:
 
 -   Lithuania which is the 2nd biggest driver of users - is the 53rd place when it comes to revenue ?! This means that there are tons of users coming from Lithuania to the client's website but somehow they do not monetise them. This seems odd
--   In addition to Australia - also Ireland and Japan seem to be 2x higher ranked in terms of revenue compared to rank in terms of users. This means that even though they do not bring the highest volumes of users to the website - they still manage to monetise them quite well - something to be investigated perhaps later (e.g. check their channel mix and see if it is any different than the others)
+-   In addition to Australia - also Ireland and Japan seem to be 2x higher ranked in terms of revenue compared to rank in terms of users. This means that even though they do not bring the highest volumes of users to the website - they still manage to monetise them quite well - something to be investigated perhaps later (TODO: check their channel mix and see if it is any different than the others ?) (TODO: insert link to this in appendix)
 
-Once more i want to make sure Lithuania is strange and compare against e.g.
-
-```{r}
-#| label: recheck-lithuania
-by_country |> 
-  filter(country %in% c("Lithuania", "Germany"))
-```
+Once more i want to make sure Lithuania is unusual and compare against e.g. Germany
 
 Comparing the ratio of users vs. ratio of revenue for Lithuania vs. Germany
 
@@ -255,37 +355,54 @@ compare_revenue <- by_country |>
   deframe()
 
 c(
-  users = compare_users,
-  users_ratio = compare_users["Lithuania"] / compare_users["Germany"],
+  users = { comma_format()(compare_users) },
   
-  revenue = compare_revenue,
-  revenue_ratio = compare_revenue["Lithuania"] / compare_revenue["Germany"]
-) |> 
-  prettyNum(scientific = F)
+  users_ratio = {
+    (compare_users["Lithuania"] / compare_users["Germany"]) |> 
+      percent_format(accuracy = 0.1)()
+    
+  },
+  
+  revenue = { comma_format()(compare_revenue) },
+  
+  revenue_ratio = {
+    (compare_revenue["Lithuania"] / compare_revenue["Germany"]) |>
+      percent_format(accuracy = 0.1)()
+  }
+)
 ```
 
-Ok this is confirmation enough i guess - Lithuania is \~140% bigger than Germany in terms of bringing users to the client's website - however it is strangely 6% of the revenue that Germany brings !?
+Ok this is confirmation enough i guess:
 
-## Final selection of countries
+-   keeping in mind that Lithuania is \~3 Mil people, Germany \~85 Mil people
+-   Lithuania brings \~140% more users than Germany
+-   but "only" 6% of the revenue of Germany
 
-```{r}
-#| label: final-overview-selected-countries
-by_country |> 
-  summarise(n_countries = n_distinct(country))
-```
+This could be either a "glitch" in the data - then something worth investigating further. Or it could be that the client is super popular in Lithuania but also has very cheap pricing - which could also explain these numbers.
 
-## Market penetration
+# Market penetration
 
-I would like to try out the following
+I would like to try out the following:
 
--   we have the data on how many users from a country were customers with our client in 2022
--   we can get the data on countries population as well as proportion of population from each country that participates in tourism. these could be our \~ theoretical upper bound on the number of customers from a country i.e. imagining that every person from a country has purchased with the client - then we should see this number of users in the data
--   the ratio of the first point to the second - would give us another view on "market penetration" - in the sense that we can say `1 in N` people from Country-A has purchased with the client in 2022.
--   to tie this together - comparing these rations between *comparable* countries could give us an idea where we could boost our marketing efforts and increase the market presence.
+-   we have the data on how many transactions from a country the client had in 2022
+    -   let's assume these are all unique customers i.e. there are no customers with multiple transactions in a country (see also the callout below)
+-   we can get the data on countries population as well as proportion of population from each country that participates in tourism. these could be our \~ theoretical upper bound on the number of customers from a country i.e. imagining that every person from a country has purchased with the client - then we should see this number of customers coming from a certain country
+-   the ratio of the first point to the second - would give us a view on "market penetration" - in the sense that we can say `1 in N` people from a country have purchased with the client in 2022
+-   to tie this together - comparing these rations between *comparable* countries could give us an idea where we could boost our marketing efforts and increase the market presence
 
-[Proportion of population that participated in tourism](https://ec.europa.eu/eurostat/statistics-explained/index.php?title=Tourism_statistics)
+::: {.callout-important appearance="simple"}
+For the sake of this "thought experiment" let's assume these are all unique individual customers i.e. there are no users with multiple transactions in the data. This is a **huge assumption** but since we do not have the data on unique \# customers that purchased something with our client - this has to do.
 
-More concretely:
+We could either assume some transaction factor for each users e.g. a user makes 2 transactions per year on average - and then scale the \# transactions down. Or we could try to get the correct data on the unique \# customers for each country.
+:::
+
+Luckily it was relatively easy to find the extra data on country population and participation in tourism e.g. from the Eurostat website - [Proportion of population that participated in tourism](https://ec.europa.eu/eurostat/statistics-explained/index.php?title=Tourism_statistics).
+
+More concretely i need to combine 3 datasets and calculate the additional metrics:
+
+-   `customers := transactions` (the big assumption)
+-   `customers share := customers / tourists` (\~ market penetration)
+-   `one in N is customer := 100 / customers share` (\~ easier to understand view on the above)
 
 ```{r}
 #| label: setup-market-penetration
@@ -304,7 +421,7 @@ country_population <-
 
 # prorortion of population that participates in tourism
 country_tourists <- 
-  get_eurostat("tour_dem_totot") |>
+  get_eurostat("tour_dem_totot", cache = T) |>
   label_eurostat() |> 
   filter(
     duration == "1 night or over",
@@ -312,7 +429,7 @@ country_tourists <-
     unit == "Number",
     time == ymd(20210101)
   )|> 
-  select(geo, time, values) |>
+  select(geo, values) |>
   rename(country = geo, tourists = values)
 
 # transactions ~ # of customers from country for our client
@@ -333,9 +450,10 @@ country_penetration <-
     one_in_N_tourists_has_transacted = floor(1 / customers_share),
     customers_share = percent_format(accuracy = 0.001)(customers_share)
   ) |> 
+  mutate(across(is.numeric, ~ round(.x , 0))) |> 
   arrange(desc(customers_share))
 
-datatable(country_penetration)
+datatable(country_penetration, options = list(dom = 't'))
 ```
 
 Not all countries got matched - the tourism data is only for EU but that would do.
@@ -354,34 +472,34 @@ country_penetration |>
     revenue,
     revenue_per_transaction
   ) |> 
-  datatable()
+  datatable(options = list(dom = 't'))
 ```
 
-If my logic and flow are correct - the situation is as following:
+If my logic and flow are correct and taking Germany and France as an example - the reasoning would be as following:
 
--   1 in 962 Germans was a customer with our client in 2022
--   1 in 632 French was a customer with our client in 2022
+-   1 in 962 German people was a customer with our client in 2022
+-   1 in 632 French people was a customer with our client in 2022
 
-Assuming these 2 are comparable markets, where our client has similar marketing initiatives, efforts, spend etc.
+*Assuming* these 2 are comparable markets, where our client has similar marketing initiatives, efforts, spend etc.
 
-The argument would be - If we could get the same market penetration in Germany as we have in France - for instance by using the same "marketing playbook" they did in France. Then they could potentially increase their market penetration in Germany from `0.104% -> 0.158%` .
+The argument would be - If we could get the same market penetration in Germany as we have in France - for instance by using the same "marketing playbook" the client did in France. Then they could potentially increase their market penetration in Germany from `0.104% -> 0.158%` .
 
-This would mean `r 0.00158 * 46994591`
+Recalibrating the numbers from Germany with this potential penetration we would get:
 
 ```{r}
 #| label: germany-potential
 #| echo: true
 
 # numbers from table above
-current_revenue_germany <- 12906843
-current_customers_germany <- 48819
+current_revenue_germany   <- 12906843
+current_customers_germany <-    48819
 current_revenue_per_customer_germany <- 264
 
 tourists_germany <- 46994591
 
 # the current and "hypothetical" customer share
 # the client could achieve
-current_customer_share_germany <- 0.00104
+current_customer_share_germany   <- 0.00104
 potential_customer_share_germany <- 0.00158
 
 # potential customers if increase happens
@@ -392,35 +510,25 @@ potential_customers_germany <- floor(
 potential_revenue_germany <- (
   current_revenue_per_customer_germany * potential_customers_germany
 )
-# extra cash and uplift in revenue in Germany
+# extra revenue and uplift in revenue in Germany
 c(
-  increase_abs = comma_format(suffix = "€")(
+  "Increase in Revenue Germany" = comma_format(suffix = "€")(
     potential_revenue_germany - current_revenue_germany
   ),
-  uplift = percent_format(accuracy = 0.01)(
+  "Uplift Revenue Germany" = percent_format(accuracy = 0.01)(
     (potential_revenue_germany - current_revenue_germany) / current_revenue_germany
   )
 )
 ```
 
-## Throwaway things
+The potential absolute increase in revenue would be \~ 6,5 Mil € or a 50% uplift compared to 2022.
 
-### Users map
+However good or attractive these numbers look - they are based on some very big assumptions
 
-```{r}
-#| label: users-map
-#| column: screen
-#| out-width: 70%
-#| fig-format: svg
-mapCountryData(by_country_map, nameColumnToPlot = "users")
-```
+-   that \# transactions = \# unique customers
+-   that markets are comparable and would respond to the same marketing strategy i.e. that the same playbook would deliver the desired results across countries
+    -   N.B. in my opinion this is not a crazy assumption but needs to be definitely discussed and checked with the domain experts and marketing team from our client
+-   assuming both assumptions above even hold - then lastly it does not have to follow that the extra new customers would deliver the same average value as the "first" customers i.e. we could be acquiring lower-value-customers in a country (or the first 1000 customers do not spend like the last 1000 customers)
+    -   this would mean non-linear increase in revenue when linearly increasing the customer base
 
-### Transactions map
-
-```{r}
-#| label: transactions-map
-#| column: screen
-#| out-width: 70%
-#| fig-format: svg
-mapCountryData(by_country_map, nameColumnToPlot = "transactions")
-```
+In conclusion - we could repeat this kind of line or reasoning with the correct data on number of unique customers per country in order to see if the same argument as presented here holds. Even if the numbers are wildly incorrect, we could still reuse this kind of reasoning to pinpoint potential markets for expansion.

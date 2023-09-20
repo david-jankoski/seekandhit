@@ -1,1 +1,3 @@
 # Other ideas
+
+From markovchain pkg - [meanNumVisits](https://cran.r-project.org/web/packages/markovchain/markovchain.pdf#page=40&zoom=auto,-66,464) function or

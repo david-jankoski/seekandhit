@@ -6,18 +6,19 @@ code-fold: true
 
 # Conversion paths
 
-## Summary
+In this section I plan to look at the conversion paths data export into more detail. The one big question waiting to be asked and answered with this kind of file export is - building a Markov model on the conversion paths and investigating the resulting network:
 
-TODO: add links to most important sections below.
+-   how does it compare against the simpler heuristics like last touch / first touch ?
+    -   here in particular it would be interesting to compare against the last touch as that would actually give us a eye-to-eye comparison of these 2 types of attribution models
+    -   given that I have already seen the last-non-direct attributed view on the data from the `country_medium.csv` file, I am curious how would the `referral` medium perform in this view
+-   what do the Removal Effects say i.e. according to the Markov model - what % of the conversions would not have happened - had we removed a certain medium
+    -   here also in particular it would be interesting to see how do the main contributors from the country/medium analysis fare against each other i.e. how do `referral, (none), organic, cpc` do in terms of their removal effects ? are some over-/under- valued ?
+
+While these are the major points I expect to come out of this section, one other interesting thing could be
+
+-   check the distribution of the conversion path lenghts; what is the most usual length of touchpoints that customers go through before converting ?
 
 # Data exploration
-
-In this section I would like to explore the conversion paths file
-
--   take a look at the data quality
--   check the distribution of the conversion path lenghts - check what is the most usual length of touchpoints that customers go through before converting
--   and lastly - fit a Markov Model and see what the transition network between the different mediums shows. One interesting thing I expect to come out is the Removal Effects that this model provides - which would be the unbiased / more objective importance weights of the mediums in the overall customer journey
-    -   and compare this to the results I got from the analysis of the country / medium file
 
 ```{r}
 #| label: setup
@@ -229,18 +230,19 @@ Maybe an idea would be to come up with some simple rules for buckets and see if 
 
 These are some of the questions I expect to perhaps show some interesting things.
 
+## In terms of number of steps
+
 How does the distribution of path lengths look like ?
 
 ```{r}
 #| label: explore-path-lenghts-1
 path_lengths <- conv_paths |>
-  select(medium_path) |>
   mutate(
     path_splits = str_split(medium_path, " > "),
     path_length = map_int(path_splits, length),
     first_touchpoint_medium = map_chr(path_splits, first)
-  ) |>
-  select(path_length, first_touchpoint_medium)
+  ) |> 
+  select(path_length, first_touchpoint_medium, value)
 
 ggplot(path_lengths, aes(path_length)) + geom_histogram(binwidth = 1)
 ```
@@ -249,6 +251,7 @@ It's heavily right skewed with extremely long path lengths - apparently conversi
 
 ```{r}
 #| label: explore-path-lenghts-2
+#| warning: false
 ggplot(path_lengths, aes(path_length)) +
   geom_histogram(binwidth = 1) +
   xlim(0, 50)
@@ -263,13 +266,58 @@ How does the right end of the distribution look like ?
 quantile(path_lengths$path_length, probs = seq(0.50, 1.00, 0.05))
 ```
 
--   half of the conversions take 10 touchpoints to convert
--   90% of the conversions take \<= 26 touchpoints to convert
+-   half of the conversions take `<= 10` touchpoints to convert
+-   90% of the conversions take `<= 26` touchpoints to convert
+
+## In terms of value
+
+In terms of number of steps - the most common paths are 7-9 steps long, but how about in terms of value ? What are the path lengths that bring the most monetary value and are these the same ?
+
+```{r}
+#| label: explore-path-lenghts-4
+path_lengths |> 
+  group_by(path_length) |> 
+  summarise(value = sum(value)) |> 
+  filter(path_length <= 15) |> 
+  ggplot(aes(x = as.factor(path_length), y = value)) +
+  geom_col() +
+  scale_y_continuous(labels = label_comma(prefix = "€")) +
+  labs(
+    x = "Path length",
+    y = NULL,
+    title = "Monetary value brought by the different path lengths"
+  ) +
+  theme(
+    plot.title.position = "plot"
+  )
+```
+
+It seems like the path length is highly (negatively) correlated with the value it brings i.e. the longer the path - the less value we expect it to bring. I guess this makes sense ? I imagine a highly "unsure" customer that is hesitating and keeps "prolonging" the customer journey vs. a determined or decisive customer whose journey is more focused ( on the other hand i wonder if this is not always the case for every industry and business ?).
+
+What % of the value is brought by path lengths of `<= 10` ?
+
+```{r}
+path_lengths |> 
+  group_by(path_length) |> 
+  summarise(value = sum(value)) |> 
+  mutate(
+    perc = value / sum(value),
+    cumul = cumsum(perc),
+    across(c(perc, cumul), percent_format(accuracy = 0.1))
+  ) |> 
+  datatable()
+```
+
+\~95% of the value is already brought by path lengths of `<= 5` !
+
+In any case - this view could be useful in some marketing optimisations i.e. if we would be able to determine the already-existing path length of a customer - then we could increase or decrease or marketing spend in order to nudge the customer or to save some costs (if we would be able to determing the customers whose journey already overstepped e.g. path length of 6 then we could chose to save these costs or re-invest them in remarketing to customers who are still at step 2 or 3 - as we know that small % of the value comes past this threshold).
+
+## Most common first medium
 
 What is the most common first medium ? This one I picked out of curiosity to see how does the usual customer journey starts.
 
 ```{r}
-#| label: explore-path-lenghts-4
+#| label: explore-path-lenghts-5
 path_lengths |>
   count(first_touchpoint_medium, sort = T) |>
   mutate(perc = percent_format(accuracy = 0.001)(n / sum(n)))
@@ -280,14 +328,14 @@ Again perhaps unsurprisingly as I saw in the country/medium analysis - `referral
 Are there any duplicate rows in the data ?
 
 ```{r}
-#| label: explore-path-lenghts-5
+#| label: explore-path-lenghts-6
 conv_paths$medium_path |> duplicated() |> sum()
 ```
 
 yes, so this means i have multiple rows with same medium path and different conversions and values, so I need to re-group-and-summarise by medium path the duplicates.
 
 ```{r}
-#| label: explore-path-lenghts-6
+#| label: explore-path-lenghts-7
 conv_paths <- conv_paths |>
   group_by(medium_path) |>
   summarise(across(c(conversions, value), sum)) |>
@@ -311,28 +359,15 @@ markov_mod <- markov_model(
   var_value = "value",
   out_more = T
 )
-
-markov_mod
 ```
 
-## Visualise transition network
+## Transition Matrix
 
 Select only the top 10 to de-clutter the network
 
 ```{r}
 top_mediums <- markov_mod$result |> 
   slice_max(order_by = total_conversions, n = 12)
-```
-
-```{r}
-#| label: channel-indexes-?--TODO:-REMOVE
-
-# proof that channels are cross-referenced between
-# result and transition_matrix
-#
-# conv_paths |> filter(str_detect(medium_path, "zalo"))
-# markov_mod$transition_matrix |> tail(2)
-# conv_paths |> head(1)
 ```
 
 ```{r}
@@ -367,80 +402,61 @@ transition_matrix <- markov_mod$transition_matrix |>
   group_by(channel_from) |> 
   slice_max(order_by = transition_probability, n = 3, with_ties = F) |> 
   ungroup()
-
 ```
 
-## Heatmap Transition Matrix
+### Heatmap
+
 ```{r}
 transition_matrix |> 
   ggplot(aes(x = channel_from, y = channel_to, fill = transition_probability)) +
   geom_tile() +
-  scale_fill_distiller(palette = "RdPu", direction = 1)
+  geom_label(
+    aes(label = percent_format(accuracy = 0.1)(transition_probability)),
+    label.size = NA,
+    alpha = 0.5,
+    size = 3.4
+  ) +
+
+  #scale_fill_brewer(palette = RColorBrewer::brewer.pal(11, "BrBG")) +
+  scale_fill_gradient(
+    low = "tomato2",
+    high = "olivedrab3",
+    na.value = "cornsilk4"
+  ) +
+
+  labs(
+    x = "To",
+    y = "From"
+  ) + 
+  coord_flip() +
+  theme_minimal() +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    legend.position = "bottom",
+    legend.direction = "horizontal"
+  )
 ```
 
+#### Conclusions from this part
 
+As suspected - quite some interesting and different views on customer conversions from this side
+
+-   To end up in the `(conversion)` state, the highest transition probability 82.6% is coming from `(none`). Compare this with 68.8% coming from `referral`
+    -   this is in contrast to the country/medium view where `referral` was always dominating the shares
+-   from an `organic` state - it's more likely that the path continues to a `cpc` or `(none)` than to a `(conversion)`
+    -   `organic` is an important middle-step in the customer journey that feeds the other mediums
+-   also conversely, crossing a `cpc` paid search touchpoints is most likely coming from an `organic` search
+-   after `referral` one wold most likely either convert or continue to a `(none)` touch
+
+### Graph
+
+I found it a bit difficult to find an appropriate graph size and layout in order to be able to easily draw conclusions or see patterns and cliques in the data. It's a pity that it just looks nice but it's not super useful for most practical problems.
 
 ```{r}
-cols <- c("#e7f0fa", "#c9e2f6", "#95cbee", "#0099dc", "#4ab04a", "#ffd73e", "#eec73a",
-          "#e29421", "#e29421", "#f05336", "#ce472e")
-t <- max(transition_matrix$transition_probability)
- 
-ggplot(transition_matrix, aes(y = channel_from, x = channel_to, fill = transition_probability)) +
-        theme_minimal() +
-        geom_tile(colour = "white", width = .9, height = .9) +
-        scale_fill_gradientn(colours = cols, limits = c(0, t),
-                             breaks = seq(0, t, by = t/4),
-                             labels = c("0", round(t/4*1, 2), round(t/4*2, 2), round(t/4*3, 2), round(t/4*4, 2)),
-                             guide = guide_colourbar(ticks = T, nbin = 50, barheight = .5, label = T, barwidth = 10)) +
-        geom_text(aes(label = round(transition_probability, 2)), fontface = "bold", size = 4) +
-        theme(legend.position = 'bottom',
-              legend.direction = "horizontal",
-              panel.grid.major = element_blank(),
-              panel.grid.minor = element_blank(),
-              plot.title = element_text(size = 20, face = "bold", vjust = 2, color = 'black', lineheight = 0.8),
-              axis.title.x = element_text(size = 24, face = "bold"),
-              axis.title.y = element_text(size = 24, face = "bold"),
-              axis.text.y = element_text(size = 8, face = "bold", color = 'black'),
-              axis.text.x = element_text(size = 8, angle = 90, hjust = 0.5, vjust = 0.5, face = "plain")) +
-        ggtitle("Transition matrix heatmap")
-```
-
-## Interactive wobbly network
-```{r}
-#| label: visualise-network-1
-library("visNetwork")
-
-transition_matrix_short <-
-  transition_matrix |>
-  arrange(desc(transition_probability)) |>
-  filter(transition_probability > 0.7) |>
-  mutate(
-    label = percent_format(accuracy = 0.01)(transition_probability),
-    arrows = "to",
-    dashes = T
-  ) |>
-  rename(from = channel_from, to = channel_to)
-
-nodes <-
-  unique(c(transition_matrix_short$from, transition_matrix_short$to)) |>
-  as_tibble()
-
-nodes <- nodes |>
-  mutate(id = value) |>
-  rename(title = value) |>
-  mutate(label = title)
-
-visNetwork(
-  nodes,
-  transition_matrix_short,
-  height = "1000px",
-  width = "100%",
-)
-```
-
-
-## Static plot network
-```{r}
+#| label: static-plot-markov-network
+#| warning: false
+#| message: false
 library("igraph")
 
 top_mediums <- c(
@@ -464,16 +480,16 @@ network <- graph_from_data_frame(d = transition_matrix, directed = T)
 
 V(network)$color <- case_match(
   V(network)$name,
-   "(start)"       ~ "orange1",
-    "(conversion)" ~ "blue1",
-    "(none)"    ~ "green1",
-    "email"     ~ "green1",
-    "navbar"    ~ "green1",
-    "organic"   ~ "green1",
-    "referral"  ~ "green1",
-    "(not set)" ~ "red1",
-    "cpc"       ~ "red1",
-    "s-cpm"     ~ "red1"
+   "(start)"       ~ "darkslategray3",
+    "(conversion)" ~ "gold3",
+    "(none)"    ~ "darkolivegreen3",
+    "email"     ~ "darkolivegreen3",
+    "navbar"    ~ "darkolivegreen3",
+    "organic"   ~ "darkolivegreen3",
+    "referral"  ~ "darkolivegreen3",
+    "(not set)" ~ "firebrick2",
+    "cpc"       ~ "firebrick2",
+    "s-cpm"     ~ "firebrick2"
 )
 
 plot(
@@ -483,20 +499,29 @@ plot(
   edge.curved = F,
   edge.label = percent_format(accuracy = 0.1)(E(network)$transition_probability)
 )
-
 ```
 
 ## Removal Effects
 
 ```{r}
 #| label: removal-effects-1
-as_tibble(markov_mod$removal_effects) |>
-  arrange(desc(removal_effects_conversion_value))
+markov_mod$removal_effects |> 
+  as_tibble() |>
+  filter(removal_effects_conversion_value > 0.0) |> 
+  arrange(desc(removal_effects_conversion_value)) |> 
+  mutate(across(starts_with("removal_"), percent_format(accuracy = 0.01))) |> 
+  datatable()
 ```
+
+-   `referral` is getting over-valued in the country/medium (last non-direct) attribution model where it has the lion's share of revenue consistently across all countries. even though it's not the same measure - still the effect according to the Markov model is \~60% whereas it used to be more like \~80% in the country/medium view
+-   `(none`) is getting under-valued in the country/medium view, being credited there with only like \~8% of the revenue. In this view it is almost on par actually with `referral`
+-   `cpc` seems to be very close in terms of attribution from both views
+-   the order is the same but the % attributed value differs (at least for the top 2 mediums)
 
 # Heuristic Model
 
 ```{r}
+#| label: heuristic-mod-setup
 heuristic_mod <- heuristic_models(
   conv_paths,
   var_path = "medium_path",
@@ -518,11 +543,13 @@ heuristic <- heuristic_mod |>
   )
 ```
 
-```{r}
+::: panel-tabset
+## All on one
 
+```{r}
 top_mediums <- 
   markov_mod$result |> 
-  slice_max(order_by = total_conversions, n = 7)
+  slice_max(order_by = total_conversions, n = 6)
 
 compare_models <- 
   left_join(markov, heuristic, join_by(channel_name)) |> 
@@ -547,29 +574,29 @@ compare_models |>
   geom_col(position = "dodge")
 ```
 
+## Free facets
 
 ```{r}
-compare_models <- 
-  left_join(markov, heuristic, join_by(channel_name)) |> 
-  semi_join(top_mediums, join_by(channel_name)) |> 
-  select(channel_name, ends_with("conversions")) |> 
-  rename_with(
-    .cols = c(everything(), -channel_name),
-    str_remove,
-    pattern = "_conversions"
-  ) |> 
-  pivot_longer(
-    cols = -channel_name,
-    names_to = "model",
-    values_to = "conversions"
-  ) |> 
-  mutate(
-    channel_name = fct_reorder(channel_name, conversions, sum, .desc = T)
-  )
-
-
 compare_models |> 
-  ggplot(aes(x = channel_name, y = conversions, fill = model)) +
-  geom_col(position = "dodge")
+  ggplot(aes(x = channel_name, y = value, fill = model)) +
+  geom_col(position = "dodge") +
+  scale_y_continuous(labels = label_comma()) +
+  scale_fill_brewer(palette = "Dark2") + 
+  facet_wrap(~ channel_name, scales = "free") +
+  theme(
+    legend.position = "bottom",
+    legend.direction = "horizontal"
+  )
 ```
+:::
 
+-   `referral` is generally less valuable as compared to the heuristic models, although it is practically the same as the last-touch model. It is getting a lot of value in the first-touch model which means it's often quite high in the funnel / customer journey
+-   `(none)` is getting much less-valued in the first-touch vs. much more valued in the Markov and last-touch. This indicates that it is quite low in the funnel / customer journey, right at the end towards the conversion moment
+-   `organic` is much more valued in the Markov model than in the simpler ones - indicating that it is very instrumental in-between touch for a lot of the conversions
+-   same could be said for `email, cpc` although to a lower extent and on lower scale
+-   `cpc` seems to be same valued across first-touch and Markov which means it's also probably more high in the conversion funnel
+-   `organic` and `email` are much more valueable in reality as the simpler heuristic models can attribute
+
+The one big general takeaway from the whole section here is the importance of testing, comparing and using different models and ways of attributing value to different touchpoints in a journey. None of these models tells the whole truth on their own and it is important to "triangulate" the truth by using various models and ways to inspect the truth.
+
+Moreover - it's further closer to the truth not just different attribution models, but also completely different methods e.g. Attribution Models in addition to Marketing Mix Modelling in addition to Geo/Lift tests. Each and every one can uncover bits of reality and the power lies in combining these in order to measure the effectiveness of marketing.

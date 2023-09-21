@@ -8,9 +8,6 @@ website:
   reader-mode: true
   navbar:
     background: "#2e3f58"
-    # left:
-    #   - href: index.qmd
-    #     text: "Introduction"
   sidebar:
     style: "floating"
     contents:
@@ -36,4 +33,3 @@ format:
   bookup-html:
     embed-fonts: true
     monofont: Fira Code Light
-    page-layout: full

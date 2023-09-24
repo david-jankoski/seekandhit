@@ -10,18 +10,118 @@ execute:
 
 # Summary
 
--   main profile of marketing channel mix across countries
--   most profitable channels are
--   view from markov model
--   market penetration in various countries
--   high volume free traffic
+This section summarises the results from the various sections and ends with some potential actions the client can make in order to boost their marketing presence in various countries and hence expand their business.
 
-## Market Penetration
+```{r}
+#| label: setup
+#| echo: false
+#| warning: false
+#| message: false
+library("here")
+library("fs")
+library("DT")
+library("glue")
+library("janitor")
+library("scales")
+library("tidyverse")
+
+data_dir <- "data"
+```
+
+## Mediums view
+
+Exploring the medium mix across countries showed that the majority of the revenue/transactions/traffic of the website is brought in by free mediums. Here `referral` is consistently the top contributing medium (\~75% of transactions) across all of the top countries with `(none)`/`direct` being 2nd (\~ 8% of transactions) and `cpc` being 3rd (\~ 8% of transactions).
+
+`referral` brings in the most valuable customers as well. `organic`, even though brings less (new) users, they are more valuable on average when compared with `direct` and `cpc`.
+
+The free group of mediums being the top contributors to business is a good thing - because no (or little) marketing money is spent in order to generate this (at least in this view).
+
+For more details please see [this section](country_medium.qmd#country-medium-profiles).
+
+### Markov model
+
+Having the possibility to model the whole paths that lead to a conversion lead to interesting differing view on this i.e. `referral` while still being one of the most important channels, does get over-valued in the last-non-direct-click view. `(none)`/`direct` on the other hand gets a boost in importance when considering the conversion paths holistically i.e. it is as important channel as referral in the Markov model view.
+
+The one big general takeaway from the whole section here is the importance of testing, comparing and using different models and ways of attributing value to different touchpoints in a journey. None of these models tells the whole truth on their own and it is important to triangulate the truth by using various models and ways to inspect the truth.
+
+The results from this model suggest that the last non-direct model from GA could be too limited for this client and that a multi-touch attribution could make sense to explore and implement.
+
+For more details please see: [transition matrix](conversion_paths.qmd#transition-matrix-conclusions), [removal effects](conversion_paths.qmd#removal-effects) and [heuristic vs. markov](conversion_paths.qmd#heuristic-vs-markov).
+
+### Medium value comparisons
+
+```{r}
+country_medium_view_value_per_medium <- read_csv(
+  path_join(c(here(), data_dir, "country_medium_view_value_per_medium.csv"))
+)
+country_medium_view_value_per_medium
+```
+
+## Countries view
+
+### High volume free traffic that converts well
+
+Finland, Norway, Ireland, Saudi Arabia, Thailand, Lithuania, Switzerland, Austria - these are good candidate countries for marketing investments because - while having *low amounts of paid traffic*, they do bring in *good amounts of free traffic* and they *convert this free traffic very well*.
+
+For more details please see [this section](country_medium.qmd#high-volume-free-traffic).
+
+### Good conversion rate and high value
+
+Countries that convert traffic and have high revenue per transaction are very valuable. Examples of such countries are Japan and New Zealand (amongst the best ones, for others see the section)
+
+For more details please see [this section](country.qmd#conv-rate-rev-per-transaction).
+
+### Market Penetration
 
 Looking at the data at an aggregated country level in terms of market penetration, making some high-level, **but bold**, assumptions about the current state and the marketing playbook used in certain European countries - it could be that by using the same marketing tactics as in countries like Italy and Spain - the client could potentially achieve higher market presence and therefore higher revenue in countries like France and Germany.
 
-A short walkthrough of this reasoning (which needs data on unique number of customers from a country - in order to be completely correct) can be found [here](country.qmd#market-penetration). In consultations with the client we could identify countries that are very similar / comparable in terms of general size / population as well as marketing strategy and investments from our client's side - in order to identify potential candidates for a marketing push / expansion.
+For more details please see [this section](country.qmd#market-penetration).
 
 ## Recommendations
 
--   japan, australia mkt mix (TODO: add link)
+Putting these different views together - I compiled a list of potential countries where the client could consider scaling their marketing investment. In order to do a final tally - which should serve as potential guide as to where to start first - I did a simple list with scores of each country as to how many times appears in the different views.
+
+```{r}
+#| label: load-all-candidate-lists
+#| echo: false
+#| message: false
+#| warning: false
+good_conv_low_free_traffic <- read_csv(
+  path_join(c(here(), data_dir, "good_conv_low_free_traffic_candidates.csv"))
+)
+
+high_conv_rate_and_valuable <- read_csv(
+  path_join(c(here(), data_dir, "high_conv_rate_and_valuable_candidates.csv"))
+)
+
+potential_mkt_scaling <- read_csv(
+  path_join(c(here(), data_dir, "potential_mkt_scaling_candidates.csv"))
+)
+
+```
+
+```{r}
+#| label: final-recommendation-countries
+
+all_countries <- unique(
+  c(
+    good_conv_low_free_traffic$country,
+    high_conv_rate_and_valuable$country,
+    potential_mkt_scaling$country
+  )
+)
+final_recommendation_countries <- 
+  tibble(country = all_countries) |> 
+  left_join(good_conv_low_free_traffic) |> 
+  left_join(high_conv_rate_and_valuable) |> 
+  left_join(potential_mkt_scaling) |> 
+  rowwise() |> 
+  mutate(total_score = sum(c_across(-country), na.rm = T)) |> 
+  arrange(desc(total_score)) 
+
+datatable(final_recommendation_countries)
+```
+
+Saudi Arabia, Austria and Netherlands are candidate countries that appear in 2 of the 3 views and hence could be a good starting point for scaling marketing investments.
+
+They are all countries where free traffic is already converting well while paid traffic is low - which means the client is likely not doing any paid marketing. So boosting marketing investments in these countries could likely mean also good returns. They are also countries with a high revenue per transaction and hence the customers are above-average-valuable.

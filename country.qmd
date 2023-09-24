@@ -9,13 +9,14 @@ execute:
 
 # Country
 
-## Summary
+In this section I will try to look at the `medium_country` data from a higher level - aggregated per country. I would like to see first an intro to the data, which countries drive the most users and revenue, try to identify a subset on which I can focus the analysis and lastly - try to give an advice to our client by just looking at this level.
 
-TODO: add links to most important sections below
+The first section is exploring the data - feel free to jump to the more interesting parts:
+
+-   A [look into](#conv-rate-rev-per-transaction) which countries could simultaneously be good and converting traffic and having high revenue per transaction
+-   Kind of "thought experiment" on how to gain better marketing traction just by [looking at](#market-penetration) the current situation
 
 ## Data exploration
-
-In this section I will try to look at the `medium_country` data from a higher level - aggregated per country. I would like to see first an intro to the data, which countries drive the most users and revenue, try to identify a subset on which I can focus the analysis and lastly - try to give an advice to our client by just looking at this level.
 
 ```{r}
 #| label: setup
@@ -63,10 +64,10 @@ by_country <-
       c(users, new_users, sessions, transactions, revenue),
       sum
     ),
-    # take medians for the rates, shares, durations
+    # take means for the rates, shares, durations
     across(
       c(bounce_rate, pages_session, avg_session_duration, ecommerce_conversion_rate),
-      median
+      mean
     )
   ) |> 
   ungroup() |> 
@@ -122,6 +123,8 @@ by_country |>
   arrange(desc(revenue)) |> 
   datatable()
 ```
+
+Doing a qualitative check along this list confirms that these seems to be small and not so interesting countries indeed - either in terms of volume of traffic or very small number of transactions.
 
 How many countries will be removed with this rule ? How much of the revenue do they contribute to ?
 
@@ -184,11 +187,14 @@ by_country_map <- joinCountryData2Map(
   joinCode = "NAME",
   nameJoinColumn = "country"
 )
+
+colours <- RColorBrewer::brewer.pal(11, "BrBG")[c(2:5, 9:10)]
+
 mapCountryData(
   by_country_map,
   nameColumnToPlot = "revenue_ntile",
   numCats = 5,
-  colourPalette = RColorBrewer::brewer.pal(n = 8, name = "Reds")[-1],
+  colourPalette = colours,
   mapTitle = "Map in terms of revenue buckets"
 )
 ```
@@ -198,6 +204,12 @@ mapCountryData(
 -   Bottom tiers would be most of North Africa and some of the Middle East
 
 I *expect* the map to look very similar if we plot \# of users, sessions or transactions instead.
+
+One interesting thing to notice here is that the briefing from the client mentions that Argentina is a top market country with 30%+ market shere, however looking at the map it is a tier-2 country.
+
+```{r}
+hues::swatch(colours)
+```
 
 # Which countries drive the most ?
 
@@ -287,100 +299,145 @@ by_country |>
 
 It seems that it is quite similar across the main metrics with the usual top countries driving the most (new) users, transactions and revenue.
 
-## Countries that swap ranks drastically ?
+```{r}
+by_country |> 
+  slice_max(order_by = ecommerce_conversion_rate, n = 30) |> 
+  mutate(country = fct_reorder(country, ecommerce_conversion_rate)) |> 
+  ggplot(aes(x = ecommerce_conversion_rate, y = country)) +
+  geom_col(fill = "mediumpurple4") +
+  scale_x_continuous(labels = percent_format(), expand = c(0, 0)) +
+  labs(
+    title = "Which countries drive the most revenue ?",
+    x = "€ Revenue",
+    y = NULL
+  ) +
+  theme_minimal() + 
+  theme(plot.title.position = "plot")
+```
 
-However I noticed something interesting here:
-
--   Lithuania which was one of the top drivers for (new) users - in terms of revenue dropped significantly
--   I also have the sense that Australia - which was not even on the top 20 charts in terms of (new) users - jumped straight to the middle when we switched to revenue-view
-
-I would like to check this in a bit more detail by ranking the countries with respect to these metrics and checking the difference in these ranks.
+## Conclusions from this part
 
 ```{r}
-#| label: country-ranks
-#| echo: true
-country_ranks <- by_country |> 
-  mutate(
-    across(
-      c(users, transactions, revenue),
-      ~ dense_rank(desc(.x)),
-      .names = "{col}_rank"
-    )
+by_country |> 
+  filter(country != "(not set)") |> 
+  arrange(
+    desc(revenue),
+    desc(users), 
+    desc(ecommerce_conversion_rate),
+    desc(transactions),
   ) |> 
-  select(country, ends_with("rank")) |> 
-  arrange(transactions_rank)
-
-datatable(country_ranks)
+  head(12)
 ```
 
-I would like to see which countries have either:
+# Conversion rate vs. revenue per transaction {#conv-rate-rev-per-transaction}
 
--   difference-in-ranks (users minus revenue rank) bigger than 20 or
--   the ratio of ranks is more than double (users to revenue rank)
+## High
+
+Countries that convert traffic and have high revenue per transaction are very valuable. In case the traffic is low in such a country - then a suggestion could be to scale up marketing and bring in more traffic.
+
+I would take a look at:
+
+-   countries that convert traffic better than half of the countries in the list
+-   their revenue per transaction is above the average level
 
 ```{r}
-#| label: big-diff-in-country-ranks
-#| echo: true
-country_ranks |> 
+#| label: high-conv-rate-valuable-setup
+high_conv_rate_and_valuable <- by_country |> 
+  filter(country != "(not set)", transactions > 2000) |> 
   mutate(
-    ranks_diff = abs(users_rank - revenue_rank),
-    users_to_revenue_rank_ratio = users_rank / revenue_rank
-    ) |> 
-  filter(
-    (ranks_diff > 20) | (users_to_revenue_rank_ratio >= 2)
-    ) |> 
-  datatable()
+    diff_to_mean_revenue_per_transaction = {
+      as.integer(revenue_per_transaction - mean(revenue_per_transaction))
+    },
+    ecommerce_conversion_rate = percent_format(accuracy = 0.01,)(ecommerce_conversion_rate),
+    revenue_per_transaction = as.integer(revenue_per_transaction),
+    # country has better ecomm.conv.rate than 50% of the others
+    is_top_converting_country = percent_rank(desc(ecommerce_conversion_rate)) <= 0.5,
+    # country has above average revenue per transaction
+    is_rev_per_trans_higher_than_avg = diff_to_mean_revenue_per_transaction > 0
+  ) |> 
+  select(
+    country,
+    ecommerce_conversion_rate,
+    is_top_converting_country,
+    revenue_per_transaction,
+    diff_to_mean_revenue_per_transaction,
+    is_rev_per_trans_higher_than_avg,
+    users,
+    new_users,
+    transactions,
+    revenue,
+    sessions
+  ) |> 
+  filter( is_top_converting_country, is_rev_per_trans_higher_than_avg ) |> 
+  arrange(desc(ecommerce_conversion_rate), desc(revenue_per_transaction))
+
+datatable(high_conv_rate_and_valuable)
 ```
 
-Indeed it seems there are some interesting cases here:
+## Conclusion for this part {#conv-rate-rev-per-transaction-conclusions}
 
--   Lithuania which is the 2nd biggest driver of users - is the 53rd place when it comes to revenue ?! This means that there are tons of users coming from Lithuania to the client's website but somehow they do not monetise them. This seems odd
--   In addition to Australia - also Ireland and Japan seem to be 2x higher ranked in terms of revenue compared to rank in terms of users. This means that even though they do not bring the highest volumes of users to the website - they still manage to monetise them quite well - something to be investigated perhaps later (TODO: check their channel mix and see if it is any different than the others ?) (TODO: insert link to this in appendix)
+The above list of countries is an interesting subset of all the countries in terms of good converting and high revenue traffic. Taking New Zealand and Japan as example:
 
-Once more i want to make sure Lithuania is unusual and compare against e.g. Germany
+-   Japan is one of the 3 countries in this list with conv.rate higher than 1% while also having revenue per transaction that is 91€ higher than the average
+-   New Zealand is slightly below with conv.rate of 0.94% but it's revenue per transaction is 230€ higher than the average
 
-Comparing the ratio of users vs. ratio of revenue for Lithuania vs. Germany
+It would make sense to invest in marketing in these countries as the traffic is very valuable and very likely to convert.
 
 ```{r}
-#| label: lithuania-vs-germany
-#| echo: true
-compare_users <- by_country |> 
-  filter(country %in% c("Lithuania", "Germany")) |> 
-  select(country, users) |> 
-  deframe()
+#| label: high-conv-rate-valuable-candidates-save
+#| echo: false
+high_conv_rate_and_valuable_candidates <- high_conv_rate_and_valuable |> 
+  select(country) |>
+  mutate(good_conversion_and_high_value = T)
 
-compare_revenue <- by_country |> 
-  filter(country %in% c("Lithuania", "Germany")) |> 
-  select(country, revenue) |> 
-  deframe()
+filename <- "high_conv_rate_and_valuable_candidates.csv"
 
-c(
-  users = { comma_format()(compare_users) },
-  
-  users_ratio = {
-    (compare_users["Lithuania"] / compare_users["Germany"]) |> 
-      percent_format(accuracy = 0.1)()
-    
-  },
-  
-  revenue = { comma_format()(compare_revenue) },
-  
-  revenue_ratio = {
-    (compare_revenue["Lithuania"] / compare_revenue["Germany"]) |>
-      percent_format(accuracy = 0.1)()
-  }
-)
+high_conv_rate_and_valuable_candidates |> 
+  write_csv(path_join(c(here(), data_dir, filename)))
 ```
 
-Ok this is confirmation enough i guess:
+## Low
 
--   keeping in mind that Lithuania is \~3 Mil people, Germany \~85 Mil people
--   Lithuania brings \~140% more users than Germany
--   but "only" 6% of the revenue of Germany
+A small side note could be to inspect the countries with the lowest conv.rate that do bring lots of users to the website. Perhaps by investing some money into improving the quality of service in these countries could bring lots of gain due to the potentially gaining many new paying customers that are currently for some reason not trusting/buying the service.
 
-This could be either a "glitch" in the data - then something worth investigating further. Or it could be that the client is super popular in Lithuania but also has very cheap pricing - which could also explain these numbers.
+```{r}
 
-# Market penetration
+low_conv_rate_high_traffic <- by_country |> 
+  filter(country != "(not set)", transactions > 2000) |> 
+  mutate(
+    diff_to_mean_revenue_per_transaction = {
+      as.integer(revenue_per_transaction - mean(revenue_per_transaction))
+    },
+    ecommerce_conversion_rate = percent_format(accuracy = 0.01,)(ecommerce_conversion_rate),
+    revenue_per_transaction = as.integer(revenue_per_transaction),
+    # country has better ecomm.conv.rate than 50% of the others
+    is_bottom_converting_country = percent_rank(desc(ecommerce_conversion_rate)) >= 0.75,
+    # country has above average revenue per transaction
+    is_rev_per_trans_higher_than_avg = diff_to_mean_revenue_per_transaction > 0
+  ) |> 
+  select(
+    country,
+    ecommerce_conversion_rate,
+    is_bottom_converting_country,
+    revenue_per_transaction,
+    diff_to_mean_revenue_per_transaction,
+    is_rev_per_trans_higher_than_avg,
+    users,
+    new_users,
+    transactions,
+    revenue,
+    sessions
+  ) |> 
+  filter( is_bottom_converting_country ) |> 
+  arrange(desc(users)) |> 
+  head(3)
+
+datatable(low_conv_rate_high_traffic)
+```
+
+Take for example Lithuania - it brings a lot of new users to the website yet it converts / transacts very badly - this could be indication of some problem with the service ? It could be worth exploring because of the potential for gaining new transacting customers easily.
+
+# Market penetration {#market-penetration}
 
 I would like to try out the following:
 
@@ -388,7 +445,7 @@ I would like to try out the following:
     -   let's assume these are all unique customers i.e. there are no customers with multiple transactions in a country (see also the callout below)
 -   we can get the data on countries population as well as proportion of population from each country that participates in tourism. these could be our \~ theoretical upper bound on the number of customers from a country i.e. imagining that every person from a country has purchased with the client - then we should see this number of customers coming from a certain country
 -   the ratio of the first point to the second - would give us a view on "market penetration" - in the sense that we can say `1 in N` people from a country have purchased with the client in 2022
--   to tie this together - comparing these rations between *comparable* countries could give us an idea where we could boost our marketing efforts and increase the market presence
+-   to tie this together - comparing these ratios between *comparable* countries could give us an idea where we could boost our marketing efforts and increase the market presence
 
 ::: {.callout-important appearance="simple"}
 For the sake of this "thought experiment" let's assume these are all unique individual customers i.e. there are no users with multiple transactions in the data. This is a **huge assumption** but since we do not have the data on unique \# customers that purchased something with our client - this has to do.
@@ -436,7 +493,7 @@ country_tourists <-
 country_customers <- 
   by_country |> 
   filter(country != "(not set)") |> 
-  slice_max(order_by = transactions, n = 10) |> 
+  slice_max(order_by = transactions, n = 30) |> 
   select(country, transactions, revenue, revenue_per_transaction) |> 
   rename(customers = transactions)
 
@@ -453,7 +510,7 @@ country_penetration <-
   mutate(across(is.numeric, ~ round(.x , 0))) |> 
   arrange(desc(customers_share))
 
-datatable(country_penetration, options = list(dom = 't'))
+datatable(country_penetration)
 ```
 
 Not all countries got matched - the tourism data is only for EU but that would do.
@@ -472,10 +529,41 @@ country_penetration |>
     revenue,
     revenue_per_transaction
   ) |> 
-  datatable(options = list(dom = 't'))
+  datatable()
 ```
 
-If my logic and flow are correct and taking Germany and France as an example - the reasoning would be as following:
+The list contains countries that I believe can be considered in pairs - where one of the countries is ranked higher in this view of market penetration and the other one lower. Given that they are similar (which is the assumption in this part but needs to be checked with the client if that also makes sense from their business and marketing perspective) - the suggestion would be to use the higher-ranked country, check if there are some marketing initiatives that the client has done there but not in the lower-ranked country - then use this as a suggestion to marketing expansion.
+
+For example such pairs could be:
+
+-   Norway \<-\> Sweden
+-   Greece \<-\> Portugal
+-   Czechia \<-\> Austria
+-   Italy \<-\> Spain
+-   Belgium \<-\> Netherlands
+-   France \<-\> Germany
+
+```{r}
+#| label: potential-mkt-scaling-candidates-save
+#| echo: false
+filename <- "potential_mkt_scaling_candidates.csv"
+
+potential_mkt_scaling <- tibble(
+  country = c(
+    "Sweden",
+    "Portugal",
+    "Austria",
+    "Spain",
+    "Netherlands",
+    "Germany"
+  )
+) |> 
+  mutate(potential_marketing_scaling = T)
+ 
+write_csv(potential_mkt_scaling, path_join(c(here(), data_dir, filename)))
+```
+
+Taking Germany and France as an example - the reasoning would be as following:
 
 -   1 in 962 German people was a customer with our client in 2022
 -   1 in 632 French people was a customer with our client in 2022

@@ -18,6 +18,11 @@ While these are the major points I expect to come out of this section, one other
 
 -   check the distribution of the conversion path lenghts; what is the most usual length of touchpoints that customers go through before converting ?
 
+The first section explores a bit the data and does some cleaning - feel free to jump to the more interesting parts:
+
+-   A [look](#distribution-path-lengths) at the average number of steps it takes for a client to make a conversion on the client's website
+-   Exploring the results from the Markov model, the [transition probabilities](#transition-matrix-conclusions), the [removal effects](#removal-effects) and a [comparison](#heuristic-vs-markov) of heuristic vs. markov model conversion attribution results
+
 # Data exploration
 
 ```{r}
@@ -219,7 +224,7 @@ mediums |> map(unique)|> flatten_chr() |> unique() |> sort()
 
 From a first look it looks like the same mediums as in the country/medium file, nothing super interesting here.
 
-# Distribution of path lenghts
+# Distribution of path lenghts {#distribution-path-lengths}
 
 What might be also interesting to look at is the distribution of path lengths and - out of curiosity - i want to check what is the most common first medium touchpoint usually.
 
@@ -350,6 +355,8 @@ I would like to fit a order-1 Markov Model to the conversion paths.
 
 ```{r}
 #| label: markov-model-1
+#| message: false
+#| warning: false
 library("ChannelAttribution")
 
 markov_mod <- markov_model(
@@ -357,7 +364,8 @@ markov_mod <- markov_model(
   var_path = "medium_path",
   var_conv = "conversions",
   var_value = "value",
-  out_more = T
+  out_more = T,
+  nsim_start = 1000000
 )
 ```
 
@@ -367,7 +375,7 @@ Select only the top 10 to de-clutter the network
 
 ```{r}
 top_mediums <- markov_mod$result |> 
-  slice_max(order_by = total_conversions, n = 12)
+  slice_max(order_by = total_conversions, n = 11)
 ```
 
 ```{r}
@@ -400,7 +408,7 @@ transition_matrix <- markov_mod$transition_matrix |>
     join_by(channel_from == channel_name)
   ) |> 
   group_by(channel_from) |> 
-  slice_max(order_by = transition_probability, n = 3, with_ties = F) |> 
+  slice_max(order_by = transition_probability, n = 4, with_ties = F) |> 
   ungroup()
 ```
 
@@ -416,19 +424,13 @@ transition_matrix |>
     alpha = 0.5,
     size = 3.4
   ) +
-
-  #scale_fill_brewer(palette = RColorBrewer::brewer.pal(11, "BrBG")) +
   scale_fill_gradient(
     low = "tomato2",
     high = "olivedrab3",
     na.value = "cornsilk4"
   ) +
-
-  labs(
-    x = "To",
-    y = "From"
-  ) + 
   coord_flip() +
+  labs(x = "From", y = "To") +
   theme_minimal() +
   theme(
     panel.grid.major = element_blank(),
@@ -438,16 +440,27 @@ transition_matrix |>
   )
 ```
 
-#### Conclusions from this part
+#### Conclusions from this part {#transition-matrix-conclusions}
 
-As suspected - quite some interesting and different views on customer conversions from this side
+*(N.B. the rows do not sum up to 1 because i trimmed some channels with very small transition probabilities in order to keep the network de-cluttered).*
 
--   To end up in the `(conversion)` state, the highest transition probability 82.6% is coming from `(none`). Compare this with 68.8% coming from `referral`
-    -   this is in contrast to the country/medium view where `referral` was always dominating the shares
+As suspected - quite some interesting and different views on customer conversions from this side.
+
+-   To end up in the `(conversion)` state, the highest transition probability 82.6% is coming from `(none)`. This means that - given that you had a direct click (or visit coming in directly by typing the website) - then the most likely thing that you will do next is to actually convert
+    -   Compare this with 68.8% coming from `referral` - this means that if your last click was `referral` then you h
+        -   this is in contrast to the country/medium view where `referral` was always dominating the shares
+    -   to restate it bit differently
+        -   there is a 1 in 1.21 chance that you will convert - if your last click was `direct`.
+        -   there is a 1 in 1.45 chance that you will convert - if your last click was `referral`
+        -   so having a `direct` click increases your chances by 20% to convert
 -   from an `organic` state - it's more likely that the path continues to a `cpc` or `(none)` than to a `(conversion)`
     -   `organic` is an important middle-step in the customer journey that feeds the other mediums
--   also conversely, crossing a `cpc` paid search touchpoints is most likely coming from an `organic` search
+-   also conversely, crossing a `cpc` paid search touchpoint is most likely coming from an `organic` search
+    -   after having organic search click - people do click on paid search ads
+    -   thought/wonder - had the website converted them better at the organic search step - there would be no need to pay for the paid search ad, hence optimising the marketing spend ?
 -   after `referral` one wold most likely either convert or continue to a `(none)` touch
+    -   following the referral click, people either convert or go on to visit the client directly - which probably means that they will most likely convert as the transition direct -\> conversion is the highest
+        -   in order to confirm this we need to look at the order-2 markov model and the transition probability of referral -\> direct -\> conversion
 
 ### Graph
 
@@ -501,7 +514,13 @@ plot(
 )
 ```
 
-## Removal Effects
+## Removal Effects {#removal-effects}
+
+It's important to keep in mind here what the removal effects mean. Imagine a linear conversion path
+
+`email -> direct -> conversion`
+
+Both of these channels have 100% removal effect because the conversion would not happen if we remove either of them. That's why the following removal effects do not sum up to 100%.
 
 ```{r}
 #| label: removal-effects-1
@@ -514,11 +533,12 @@ markov_mod$removal_effects |>
 ```
 
 -   `referral` is getting over-valued in the country/medium (last non-direct) attribution model where it has the lion's share of revenue consistently across all countries. even though it's not the same measure - still the effect according to the Markov model is \~60% whereas it used to be more like \~80% in the country/medium view
--   `(none`) is getting under-valued in the country/medium view, being credited there with only like \~8% of the revenue. In this view it is almost on par actually with `referral`
+-   `(none)/direct` is getting under-valued in the country/medium view, being credited there with only like \~8% of the revenue. In this view it is almost on par actually with `referral`
+    -   so direct is almost the same value as referral - this is a huge change in value perspective (it is not the same value - but nevertheless direct went from getting \~8% of the value to \~54% of the value)
 -   `cpc` seems to be very close in terms of attribution from both views
 -   the order is the same but the % attributed value differs (at least for the top 2 mediums)
 
-# Heuristic Model
+# Heuristic Model {#heuristic-vs-markov}
 
 ```{r}
 #| label: heuristic-mod-setup
@@ -554,11 +574,11 @@ top_mediums <-
 compare_models <- 
   left_join(markov, heuristic, join_by(channel_name)) |> 
   semi_join(top_mediums, join_by(channel_name)) |> 
-  select(channel_name, ends_with("value")) |> 
+  select(channel_name, ends_with("conversions")) |> 
   rename_with(
     .cols = c(everything(), -channel_name),
     str_remove,
-    pattern = regex("(_conversion)*(_value)+")
+    pattern = "_conversions"
   ) |> 
   pivot_longer(
     cols = -channel_name,
@@ -571,7 +591,8 @@ compare_models <-
 
 compare_models |> 
   ggplot(aes(x = channel_name, y = value, fill = model)) +
-  geom_col(position = "dodge")
+  geom_col(position = "dodge") + 
+  scale_fill_brewer(palette = "Set1")
 ```
 
 ## Free facets
@@ -581,17 +602,26 @@ compare_models |>
   ggplot(aes(x = channel_name, y = value, fill = model)) +
   geom_col(position = "dodge") +
   scale_y_continuous(labels = label_comma()) +
-  scale_fill_brewer(palette = "Dark2") + 
+  #scale_fill_viridis_d(begin = 0.01, end = 0.97) +
+  scale_fill_brewer(palette = "Set1") + 
   facet_wrap(~ channel_name, scales = "free") +
   theme(
     legend.position = "bottom",
-    legend.direction = "horizontal"
+    legend.direction = "horizontal",
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  ) +
+  labs(
+    y = "# Conversions",
+    x = NULL
   )
 ```
 :::
 
 -   `referral` is generally less valuable as compared to the heuristic models, although it is practically the same as the last-touch model. It is getting a lot of value in the first-touch model which means it's often quite high in the funnel / customer journey
 -   `(none)` is getting much less-valued in the first-touch vs. much more valued in the Markov and last-touch. This indicates that it is quite low in the funnel / customer journey, right at the end towards the conversion moment
+    -   it might be confusing why the direct channel got a big jump in attribution when comparing e.g. 8% from the country/medium view whereas here we saw the removal effect of 54%
+        -   the fact that `(none)` or `direct` is less valued in the Markov model compared to Last model - while also having 54% removal effect is due to the fact that Markov model *shares* the conversions across the channels responsible for it - but all the channels in a conversion path get 100% removal effect due to the fact that the conversion would not have happened if we remove them all (imagine a linear conversion path with 2 channels and conversions - these both have 100% removal effect while also having 1/2 of the conversion)
 -   `organic` is much more valued in the Markov model than in the simpler ones - indicating that it is very instrumental in-between touch for a lot of the conversions
 -   same could be said for `email, cpc` although to a lower extent and on lower scale
 -   `cpc` seems to be same valued across first-touch and Markov which means it's also probably more high in the conversion funnel

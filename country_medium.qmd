@@ -11,8 +11,12 @@ In this section I want to look at the data on the granular country/medium level.
 -   identify and remove some noise in the data (low or zero volume mediums ?)
 -   explore the marketing mix across countries in terms of the main metrics
     -   e.g. which mediums bring the most revenue and is this consisent across countries ?
--   are there some things that jump out in terms of "bad traffic" (bounce rates and session durations) ?
 -   are there countries with relatively low volume of free traffic - that however converts very well - which could indicate potential for market expansion ?
+
+The upcoming first section is mostly data exploration and some cleaning steps - feel free to jump straight to the more interesting parts:
+
+-   Exploration of the [profiles](#country-medium-profiles) in terms of medium mix across the different countries
+-   Exploration of [high volume free traffic](#high-volume-free-traffic) - that is also converting well
 
 # Data exploration
 
@@ -55,10 +59,10 @@ by_country <-
       c(users, new_users, sessions, transactions, revenue),
       sum
     ),
-    # take medians for the rates, shares, durations
+    # take means for the rates, shares, durations
     across(
       c(bounce_rate, pages_session, avg_session_duration, ecommerce_conversion_rate),
-      median
+      mean
     )
   ) |> 
   ungroup() |> 
@@ -148,51 +152,8 @@ Ok seems like quite a big percentage of the country/medium pairs are actually lo
 
 In order to see the effect of this - I would like to check the number of mediums per country before and after the removal.
 
-::: panel-tabset
-## Before removal
-
 ```{r}
-#| label: mediums-per-country-before-removal
-medium_country |> 
-  group_by(country) |> 
-  summarise(n_mediums = n_distinct(medium)) |> 
-  ungroup() |> 
-  mutate(country = fct_reorder(country, n_mediums)) |> 
-  slice_max(order_by = n_mediums, n = 20) |> 
-  ggplot(aes(x = n_mediums, y = country)) +
-  geom_col(fill = "mediumpurple4") +
-  labs(
-    title = "# of Mediums per Country - before removal of low volume mediums",
-    x = "# Mediums",
-    y = NULL
-  )
-```
-
-## After removal
-
-```{r}
-#| label: mediums-per-country-after-removal
-medium_country |>
-  filter( !is_low_volume_medium ) |> 
-  group_by(country) |> 
-  summarise(n_mediums = n_distinct(medium)) |> 
-  ungroup() |> 
-  mutate(country = fct_reorder(country, n_mediums)) |> 
-  slice_max(order_by = n_mediums, n = 20) |> 
-  ggplot(aes(x = n_mediums, y = country)) +
-  geom_col(fill = "mediumpurple4") +
-  labs(
-    title = "# of Mediums per Country - after removal of low volume mediums",
-    x = "# Mediums",
-    y = NULL
-  )
-```
-:::
-
-It seems like it halved the \# of mediums per country.
-
-```{r}
-#| eval: false
+#| label: before-after-removal-check
 medium_country |>
   mutate(is_low_volume_medium = factor(is_low_volume_medium, levels = c(T, F), ordered = T)) |> 
   group_by(country, is_low_volume_medium) |> 
@@ -206,7 +167,7 @@ medium_country |>
   filter( country != "Other" ) |> 
   ggplot(aes(x = n_mediums, y = country, fill = is_low_volume_medium)) +
   geom_col() +
-  #scale_fill_brewer(palette = "Dark2") +
+  scale_x_continuous(expand = c(0, 0.1)) +
   scale_fill_manual(
     name = "Is Low Volume Medium ?",
     values = c(`FALSE` = "green4", `TRUE` = "red3")
@@ -222,44 +183,7 @@ medium_country |>
   )
 ```
 
-```{r}
-#| eval: false
-low_vol_mediums <- 
-  medium_country |>
-  group_by(country, is_low_volume_medium) |> 
-  summarise(n_mediums = n_distinct(medium)) |>
-  mutate(n_mediums_total = sum(n_mediums)) |> 
-  ungroup()
-
-
-low_vol_mediums |> 
-  
-  mutate(
-    country = fct_lump(country, w = n_mediums_total, n = 20, ties.method = "random")
-  ) |> 
-  filter( country != "Other" ) |> 
-  
-  mutate(
-    country = fct_reorder(country, ave(is_low_volume_medium, country), max),
-    fct_inorder()
-  ) |> 
-  
-  ggplot(aes(x = n_mediums, y = country, fill = is_low_volume_medium)) +
-  geom_col(position = position_fill(reverse = T)) +
-  scale_fill_manual(
-    name = "Is Low Volume Medium ?",
-    values = c(`FALSE` = "green4", `TRUE` = "red3")
-  ) +
-  labs(
-    title = "# of Mediums per Country, coloured by Too Low / Ok volume ?",
-    x = "# Mediums",
-    y = NULL
-  ) +
-  theme(
-    legend.position = "bottom",
-    legend.direction = "horizontal"
-  )
-```
+It seems like it would \~halve the \# of mediums per country.
 
 ### Remove low volume mediums
 
@@ -270,7 +194,7 @@ medium_country <- medium_country |>
   select(-is_low_volume_medium)
 ```
 
-# Country/Medium profiles
+# Country/Medium profiles {#country-medium-profiles}
 
 What are the contributions of different mediums to the main metrics, across the different countries ?
 
@@ -362,35 +286,6 @@ medium_country |>
   ) +
   labs(
     title = "New Users contribution of Mediums across Countries",
-    y = NULL
-  )
-```
-
-### Ecommerce conversion rate
-
-```{r}
-#| label: stacked-bars-medium-ecomm-conv-rate-absolute
-medium_country |>
-  semi_join(
-    by_country |> slice_max(order_by = revenue_country, n = 4),
-    join_by(country)
-  ) |>
-  filter(country != "(not set)") |>
-  mutate(
-    medium = fct_lump(medium, n = 7, w = ecommerce_conversion_rate),
-    medium = fct_reorder(medium, ecommerce_conversion_rate, mean),
-    country = fct_reorder(country, ecommerce_conversion_rate, sum)
-  ) |>
-  ggplot(aes(x = ecommerce_conversion_rate, y = country, fill = medium)) +
-  geom_col(position = "stack") +
-  scale_x_continuous(labels = percent_format(accuracy = 0.1), expand = c(0, 0)) +
-  scale_fill_brewer(palette = "Dark2", direction = 1) +
-  theme(
-    plot.title.position = "plot",
-    legend.position = "bottom"
-  ) +
-  labs(
-    title = "Ecommerce conversion rate contribution of Mediums across Countries",
     y = NULL
   )
 ```
@@ -651,127 +546,176 @@ revenue_share_medians <- medium_country |>
   slice_max(order_by = median_revenue_share, n = 20) |> 
   mutate(median_revenue_share = percent_format(accuracy = 0.01)(median_revenue_share))
 
-list(
-  sessions_share_medians,
-  users_share_medians,
-  new_users_share_medians,
-  transactions_share_medians,
-  revenue_share_medians
+country_medium_view <- 
+  list(
+    sessions_share_medians,
+    users_share_medians,
+    new_users_share_medians,
+    transactions_share_medians,
+    revenue_share_medians
+  ) |> 
+  reduce(left_join, by = join_by(medium))
+
+datatable(country_medium_view)
+```
+
+## Conclusions Country Medium Profiles
+
+-   `referral` seems to be consistently the dominating medium across countries, driving \~45% of sessions / (new) users and \~75% of transactions and revenue
+-   `(none)` is on the 2nd place, driving \~26% of sessions and (new) users, \~ 8% of transactions and revenue
+-   `cpc` is on the 3rd place, driving \~11% of sessions and (new) users, \~8% of transactions and revenue
+-   `organic` has slightly worse new users share median when compared to users share median i.e. it is not so good medium when it comes to bringing new users to the website.
+
+Taking `referral, (none), organic, email` as free mediums - they jointly would contribute with \~75% of the traffic and \~85% of transactions and revenue overall. The "free" group of mediums in the medium-mix of the client are responsiblie for a big portion of the traffic and business - which is a good thing - in the sense that no (or little) marketing money is spent in order to generate this.
+
+N.B. Probably not entirely true as paid brand marketing would likely highly influcence the organic traffic, as well as email is not completely free - there are at least some operational as well (likely high) licensing costs to partner with an email sending provider that can enable for high scale email sendout campaigns.
+
+Nevertheless, I believe the conclusion remains that basically a big share of the website traffic pie is brought by mostly free mediums.
+
+```{r}
+#| label: country-medium-view-save
+#| echo: false
+#| message: false
+filename <- "country_medium_view_value_per_medium.csv"
+
+country_medium_view_value_per_medium <- country_medium_view |> 
+  select(medium, median_transactions_share) |> 
+  rename(medium_country_view_value = median_transactions_share)
+
+write_csv(
+  country_medium_view_value_per_medium,
+  path_join(c(here(), data_dir, filename))
+)
+```
+
+# High volume free traffic {#high-volume-free-traffic}
+
+Given a rough classification of each medium as either free or paid. I would like to re-group-and-summarise each `(country, medium)` pair in terms of `sessions` and `ecommerce_conversion_rate`. I would take the sum of `sessions` and the `mean` of the `ecommerce_conversion_rate` per each such new grouped tuple. So for example `(Spain, cpc) -> (Spain, paid) ; (Italy, organic) -> (Italy, free)`.
+
+I would like to answer the question: in the countries where paid traffic is low (in terms of % of sessions), are there any countries where the free traffic is already converting well (in terms of the mean ecomm.conv.rate).
+
+If so - then this would mean that there are countries where we are probably not doing much of paid marketing (paid traffic, paid sessions are low - as proxy for marketing *spend* in that country). However there are people coming free, organically to the website *and* are converting well. So the conclusion here would be that we could boost marketing investment in these countries and expect good returns.
+
+Label the mediums
+
+```{r}
+#| label: label-mediums-free-paid
+#| echo: true
+
+# label the free / paid mediums
+paid_mediums <- c(
+  "cpc",
+  "display",
+  "paid-social",
+  "s-cpm",
+  "cpc,cpc",
+  "Social"
+)
+free_mediums <- c(
+  "(none)",
+  "referral",
+  "organic",
+  "email",
+  "affiliate",
+  "banner"
+)
+```
+
+With the new labeling, re-group and summarise for the metrics of interest.
+
+```{r}
+#| label: high-vol-free-traffic-setup
+#| message: false
+free_vs_paid_by_country <- medium_country |> 
+  # take top 100 countries w.r.t revenue
+  semi_join(
+    by_country |> slice_max(order_by = revenue_country, n = 150),
+    join_by(country)
+  ) |>
+  # filter and relabel the mediums
+  filter(medium %in% c(paid_mediums, free_mediums)) |> 
+  mutate(
+    medium = case_when(
+      medium %in% paid_mediums ~ "paid",
+      medium %in% free_mediums ~ "free"
+    )
+  ) |> 
+  # re-group and summarise the metrics of interest
+  group_by(country, medium) |> 
+  summarise(
+    sessions = sum(sessions),
+    mean_conv_rate = mean(ecommerce_conversion_rate)
+  ) |> 
+  # calculate the % of free and paid sessions
+  mutate(perc_sessions = sessions / sum(sessions)) |> 
+  ungroup()
+
+datatable(free_vs_paid_by_country)
+```
+
+> But by looking at 'share' it could still be that some countries have just very high free traffic and also still high paid traffic (but relatively low). I think good to pick countries with a good amount of Free traffic (so indicates traction) + an absolute low amount paid traffic (so then you know for sure it's not a focus country from an investment perspective yet) and then + a high free conversion-rate. And then clearly rank the most interesting countries from this and point out a few in the top as a conclusion of potential interesting ones.
+
+In order to pinpoint the interesting countries - I need to make some choices as cutoff points
+
+-   i want a good amout of free traffic -\> so it indicates traction
+    -   at least 500 sessions per day in the year
+-   i want a very small amount of paid traffic -\> so we know for sure that this is definitely not a focus country for the client
+    -   less than 200 sessions per day in the year
+-   and i want a high average conversion rate of the free traffic
+
+```{r}
+#| label: good-converting-low-tree-trafic
+good_converting_low_free_traffic <- 
+  free_vs_paid_by_country |> 
+  # remove the not set countries
+  filter(country != "(not set)") |> 
+  select(country, medium, sessions, mean_conv_rate) |> 
+  pivot_wider(id_cols = country, names_from = medium, values_from = c(sessions,mean_conv_rate)) |> 
+  filter(
+    # at least 500 free sessions per day
+    sessions_free > 365 * 500,
+    # less than 200 paid sessions per day
+    sessions_paid < 365 * 200
+  ) |> 
+  arrange(desc(mean_conv_rate_free)) |> 
+  mutate(across(contains("conv_rate"), percent_format(accuracy = 0.01)))
+
+datatable(good_converting_low_free_traffic)
+```
+
+## Conclusions High volume free traffic
+
+-   Denmark was often in the top countries in terms of sessions, revenue etc. and it is also on this list. However the surrounding Scandinavian countries like Finland and Norway were not in the top lists - but they do show up in this list. This could mean that there is some kind of "spill-over effect / cross-polination" going on and they could be potential candidates for boosting marketing in them
+-   The top 3 candidate countries with the best conv.rate of the free traffic are Ireland, Saudi Arabia and Thailand
+-   Excluding Denmark - we have Lithuania, Switzerland and Austria as the top 3 countries in this list with the most number of free sessions (yet not best conv.rate of it)
+
+Combining these into one general list would give: Finland, Norway, Ireland, Saudi Arabia, Thailand, Lithuania, Switzerland, Austria - these are good candidate countries for marketing investments because - while having *low amounts of paid traffic*, they do bring in *good amounts of free traffic* and they *convert this free traffic very well*.
+
+```{r}
+#| label: good-converting-low-tree-trafic-candidates-save
+#| echo: false
+filename <- "good_conv_low_free_traffic_candidates.csv"
+
+good_conv_low_free_traffic <- tibble(
+  country = c(
+    "Finland",
+    "Norway",
+    "Ireland",
+    "Saudi Arabia",
+    "Thailand",
+    "Lithuania",
+    "Switzerland",
+    "Austria"
+  )
 ) |> 
-  reduce(left_join, by = join_by(medium)) |> 
-  datatable()
+  mutate(good_converting_low_free_traffic = T)
+
+write_csv(good_conv_low_free_traffic, path_join(c(here(), data_dir, filename)))
 ```
 
-## Conclusion for this part
+# Some other things I looked at
 
--   `referral` seems to be consistently the dominating medium across countries, driving \~45% of sessions / (new) users and \~75% of transactions and revenue
--   `(none)` is on the 2nd place, driving \~26% of sessions and (new) users, \~ 8% of transactions and revenue
--   `cpc` is on the 3rd place, driving \~11% of sessions and (new) users, \~8% of transactions and revenue
-
-Taking `referral, (none), organic, email` as free mediums - they jointly would contribute with \~75% of the traffic and \~85% of transactions and revenue overall. The "free" group of mediums in the medium-mix of the client are responsiblie for a big portion of the traffic and business - which is a good thing - in the sense that no (or little) marketing money is spent in order to generate this.
-
-`organic` has slightly worse new users share median when compared to users share median i.e. it is not so good medium when it comes to bringing new users to the website.
-
-N.B. Probably not entirely true as paid brand marketing would likely highly influcence the organic traffic, as well as email is not completely free - there are at least some operational as well (likely high) licensing costs to partner with an email sending provider that can enable for high scale email sendout campaigns.
-
-Nevertheless, I believe the conclusion remains that basically a big share of the website traffic pie is brought by mostly free mediums.
-
-::: callout-tip
-## Conclusion for this part ALT
-
--   `referral` seems to be consistently the dominating medium across countries, driving \~45% of sessions / (new) users and \~75% of transactions and revenue
--   `(none)` is on the 2nd place, driving \~26% of sessions and (new) users, \~ 8% of transactions and revenue
--   `cpc` is on the 3rd place, driving \~11% of sessions and (new) users, \~8% of transactions and revenue
-
-Taking `referral, (none), organic, email` as free mediums - they jointly would contribute with \~75% of the traffic and \~85% of transactions and revenue overall. The "free" group of mediums in the medium-mix of the client are responsiblie for a big portion of the traffic and business - which is a good thing - in the sense that no (or little) marketing money is spent in order to generate this.
-
-N.B. Probably not entirely true as paid brand marketing would likely highly influcence the organic traffic, as well as email is not completely free - there are at least some operational as well (likely high) licensing costs to partner with an email sending provider that can enable for high scale email sendout campaigns.
-
-Nevertheless, I believe the conclusion remains that basically a big share of the website traffic pie is brought by mostly free mediums.
-:::
-
-# Distribution of the shares for each medium
-
-I would like to see the distribution of the revenue shares across all counties, split per medium.
-
-I got the idea when doing the tabulated view of the medians of shares in the above section and I wanted to answer the question: are there some mediums with wide variance or conversely, if revenue shares are tightly distributed around certain means with little variation ?
-
-Given the previously seen table of median revenue shares for mediums across countries - I expect `referral`'s distribution to be distinctively wide away from "the rest" - but it would be interesting to see e.g. how do `(none), cpc, organic` compare to each other - or if they even manage to spread out widely as to be competitive in a way to `referral` ?
-
-::: panel-tabset
-## Users
-
-```{r}
-medium_country |>
-  semi_join(
-    by_country |> slice_max(order_by = users_country, n = 200),
-    join_by(country)
-  ) |>
-  mutate(
-    medium = fct_lump(medium, n = 6, w = users),
-    medium = fct_reorder(medium, users)
-  ) |>
-  select(country, medium, users, users_country, users_share) |>
-  ggplot(aes(users_share)) +
-  geom_histogram(binwidth = 0.015) +
-  facet_wrap(~ medium, scales = "free_y", ncol = 1, strip.position = "right")
-```
-
-## New Users
-
-```{r}
-medium_country |>
-  semi_join(
-    by_country |> slice_max(order_by = new_users_country, n = 200),
-    join_by(country)
-  ) |>
-  mutate(
-    medium = fct_lump(medium, n = 6, w = new_users),
-    medium = fct_reorder(medium, new_users)
-  ) |>
-  select(country, medium, new_users, new_users_country, new_users_share) |>
-  ggplot(aes(new_users_share)) +
-  geom_histogram(binwidth = 0.015) +
-  facet_wrap(~ medium, scales = "free_y", ncol = 1, strip.position = "right")
-```
-
-## Revenue
-
-```{r}
-#| label: hist-dist-revenue-share
-medium_country |>
-  semi_join(
-    by_country |> slice_max(order_by = revenue_country, n = 200),
-    join_by(country)
-  ) |>
-  mutate(
-    medium = fct_lump(medium, n = 6, w = revenue),
-    medium = fct_reorder(medium, revenue)
-  ) |>
-  select(country, medium, revenue, revenue_country, revenue_share) |>
-  ggplot(aes(revenue_share)) +
-  geom_histogram(binwidth = 0.015) +
-  facet_wrap(~ medium, scales = "free_y", ncol = 1, strip.position = "right")
-
-```
-:::
-
-## Conclusion for this part
-
-When looking at the revenue shares distributions, indeed `referral` has by far a distribution mostly centered around the right end of the axis. It's interesting to see that it seems like it does not overlap at all with any of the `(none), cpc, organic` distributions i.e. there is no case for our client where one of these channels in a country - contribute as much as `referral` contributes in the "worst for `referral`" country. So quite consistent and convincing picture of the marketing medium mix in terms of what works for the client.
-
-Furthermore - seeing that `organic, (none)` which I consider free mediums - perform as well as `cpc` - makes me think that
-
-`cpc` performs better than `organic` in bringing (new) users - yet their revenue shares do not look vastly different. I would think that this is still ok - because bringing in new users especially means filling up the funnel for future `referral`'s.
-
-Quite obvious is how the distributions for `referral, (none), cpc` are close in terms of (new) users - but then a striking difference appears when switching the view to revenue. This means that:
-
--   `referral` brings 50% of the users but 70% of the revenue
--   `(none)` brings 25% of the users but 7% of the revenue
-
-Hence, the client does not manage to monetise mediums equally i.e. people coming from `(none)` usually bring less money than people coming from `referral` . However - keeping in mind that this is a view from the `country_medium.csv` file which means that this is the converting session coming from the last non-direct medium. In other words - `referral` does monetise the incoming users better, however this is not the whole picture as the other mediums might be contributing in other parts of the customer journey on the way to conversion. So it will be interesting to compare this view to the view that will come out of the `conversion_paths.csv` file i.e. the more general holistic view on the customer journey.
-
-# Revenue per transaction for each medium
+## Revenue per transaction for each medium
 
 Lastly I would like to look at the derived metric `revenue_per_transaction` - which is simply the `revenue` divided by the number of `transactions` for each `country, medium` pair (excluding the ones that have zeros in either).
 
@@ -780,12 +724,12 @@ The question that I would like to answer is - does the above general picture sti
 In order to estimate the average revenue per transaction for each medium - I will pull 10,000 bootstrap resamples from the data (stratified by medium to make sure the resamples are representative of the overlying true distribution in the general sample) and I will calculate the average revenue per transaction for each sample. I could then plot the 05th - 50th - 95th percentile of the distribution of average revenue per transaction in order to see if these whiskers highly overlap each other.
 
 ::: panel-tabset
-## Bootstrap means
+### Bootstrap means
 
 ```{r}
 #| label: bootstrap-mean-revenue-per-transaction
 
-n_bootstrap_times <- 10000
+n_bootstrap_times <- 10
 
 bootstrap_means <- 
   medium_country |>
@@ -852,7 +796,7 @@ bootstrap_means_wide |>
     )
 ```
 
-## Referral vs. Organic - test for significance
+### Referral vs. Organic - test for significance
 
 test for signif.difference between referral vs. organic bootstrap distribution of revenue per transaction means
 
@@ -878,222 +822,83 @@ t.test(
 
 It would be interesting to compare the average revenue per transaction value for `cpc` - to the average acquisition cost per customer, in order to come up with a ROI.
 
-# High volume free traffic
+## Distribution of the shares for each medium
 
-Given a rough classification of each medium as either free or paid. I would like to re-group-and-summarise each `(country, medium)` pair in terms of `sessions` and `ecommerce_conversion_rate`. I would take the sum of `sessions` and the `mean` of the `ecommerce_conversion_rate` per each such new grouped tuple. So for example `(Spain, cpc) -> (Spain, paid) ; (Italy, organic) -> (Italy, free)`.
+I would like to see the distribution of the revenue shares across all counties, split per medium.
 
-I would like to answer the question: in the countries where paid traffic is low (in terms of % of sessions), are there any countries where the free traffic is already converting well (in terms of the mean ecomm.conv.rate).
+I got the idea when doing the tabulated view of the medians of shares in the above section and I wanted to answer the question: are there some mediums with wide variance or conversely, if revenue shares are tightly distributed around certain means with little variation ?
 
-If so - then this would mean that there are countries where we are probably not doing much of paid marketing (paid traffic, paid sessions are low - as proxy for marketing *spend* in that country). However there are people coming free, organically to the website *and* are converting well. So the conclusion here would be that we could boost marketing investment in these countries and expect good returns.
-
-Label the mediums
-
-```{r}
-#| label: label-mediums-free-paid
-#| echo: true
-
-# label the free / paid mediums
-paid_mediums <- c(
-  "cpc",
-  "display",
-  "paid-social",
-  "s-cpm",
-  "cpc,cpc",
-  "Social"
-)
-free_mediums <- c(
-  "(none)",
-  "referral",
-  "organic",
-  "email",
-  "affiliate",
-  "banner"
-)
-```
-
-With the new labeling, re-group and summarise for the metrics of interest.
-
-```{r}
-#| label: high-vol-free-traffic-setup
-#| message: false
-free_vs_paid_by_country <- medium_country |> 
-  # take top 100 countries w.r.t revenue
-  semi_join(
-    by_country |> slice_max(order_by = revenue_country, n = 150),
-    join_by(country)
-  ) |>
-  # filter and relabel the mediums
-  filter(medium %in% c(paid_mediums, free_mediums)) |> 
-  mutate(
-    medium = case_when(
-      medium %in% paid_mediums ~ "paid",
-      medium %in% free_mediums ~ "free"
-    )
-  ) |> 
-  # re-group and summarise the metrics of interest
-  group_by(country, medium) |> 
-  summarise(
-    sessions = sum(sessions),
-    mean_conv_rate = mean(ecommerce_conversion_rate)
-  ) |> 
-  # calculate the % of free and paid sessions
-  mutate(perc_sessions = sessions / sum(sessions)) |> 
-  ungroup()
-
-datatable(free_vs_paid_by_country)
-```
-
-Flip the data from long -\> wide format.
-
-```{r}
-#| label: high-vol-free-traffic-wide
-countries_rank_by_low_free_sessions <- free_vs_paid_by_country |> 
-  # flip the data from long -> wide format
-  pivot_wider(
-    id_cols = country,
-    names_from = medium,
-    names_sep = "_",
-    values_from = c(perc_sessions, mean_conv_rate)
-  ) |>
-  # and rank them w.r.t to the % of free sessions traffic
-  mutate(
-    perc_sessions_free_rank = dense_rank(perc_sessions_free)
-  ) |>
-  arrange(perc_sessions_free_rank)
-
-datatable(countries_rank_by_low_free_sessions)
-```
-
-Now with all things in place - I would like to show a plot of the average conv.rate of the free traffic on the X-axis, the % of the sessions that are free for that country on the Y-axis. Additionally I coloured the interesting countries as the ones that are on the "boundary" which I first visually identified - then added some rough limits as guide: percentage of sessions that are free is \< 85%, and the average conv.rate of the free trafic is \> 2.2%.
-
-To remind once more - these are countries where we have *low free traffic but it converts very well*. Hence any paid marketing efforts would likely give good returns.
+Given the previously seen table of median revenue shares for mediums across countries - I expect `referral`'s distribution to be distinctively wide away from "the rest" - but it would be interesting to see e.g. how do `(none), cpc, organic` compare to each other - or if they even manage to spread out widely as to be competitive in a way to `referral` ?
 
 ::: panel-tabset
-## Plot
+### Users
 
 ```{r}
-#| label: high-vol-free-traffic-plot
-countries_rank_by_low_free_sessions |> 
-  filter(country != "(not set)") |> 
+medium_country |>
+  semi_join(
+    by_country |> slice_max(order_by = users_country, n = 200),
+    join_by(country)
+  ) |>
   mutate(
-    is_on_boundary = (perc_sessions_free < 0.85) & (mean_conv_rate_free > 0.022),
-    country_label = ifelse(is_on_boundary, country, NA_character_),
-  ) |> 
-  ggplot(aes(x = mean_conv_rate_free, y = perc_sessions_free, colour = is_on_boundary)) +
-  geom_point() +
-  geom_label(aes(label = country_label)) +
-  theme(
-    legend.position = "none"
-  ) +
-  scale_x_continuous(breaks = seq(0, 0.25, 0.01), labels = label_percent(accuracy = 1)) +
-  scale_y_continuous(breaks = seq(0, 1, 0.05),   labels = label_percent(accuracy = 1))
+    medium = fct_lump(medium, n = 6, w = users),
+    medium = fct_reorder(medium, users)
+  ) |>
+  select(country, medium, users, users_country, users_share) |>
+  ggplot(aes(users_share)) +
+  geom_histogram(binwidth = 0.015) +
+  facet_wrap(~ medium, scales = "free_y", ncol = 1, strip.position = "right")
 ```
 
-## Table
+### New Users
 
 ```{r}
-#| label: high-vol-free-traffic-table
-countries_rank_by_low_free_sessions |> 
-  filter(country != "(not set)") |> 
+medium_country |>
+  semi_join(
+    by_country |> slice_max(order_by = new_users_country, n = 200),
+    join_by(country)
+  ) |>
   mutate(
-    is_on_boundary = (perc_sessions_free < 0.85) & (mean_conv_rate_free > 0.022)
-  ) |> 
-  filter(is_on_boundary) |> 
-  datatable()
+    medium = fct_lump(medium, n = 6, w = new_users),
+    medium = fct_reorder(medium, new_users)
+  ) |>
+  select(country, medium, new_users, new_users_country, new_users_share) |>
+  ggplot(aes(new_users_share)) +
+  geom_histogram(binwidth = 0.015) +
+  facet_wrap(~ medium, scales = "free_y", ncol = 1, strip.position = "right")
+```
+
+### Revenue
+
+```{r}
+#| label: hist-dist-revenue-share
+medium_country |>
+  semi_join(
+    by_country |> slice_max(order_by = revenue_country, n = 200),
+    join_by(country)
+  ) |>
+  mutate(
+    medium = fct_lump(medium, n = 6, w = revenue),
+    medium = fct_reorder(medium, revenue)
+  ) |>
+  select(country, medium, revenue, revenue_country, revenue_share) |>
+  ggplot(aes(revenue_share)) +
+  geom_histogram(binwidth = 0.015) +
+  facet_wrap(~ medium, scales = "free_y", ncol = 1, strip.position = "right")
+
 ```
 :::
 
-### Pyramid plot ?
+### Conclusion distribution of shares
 
-I am going for a pyramid plot where countries are listed top-to-bottom in order of their free traffic rank.
+When looking at the revenue shares distributions, indeed `referral` has by far a distribution mostly centered around the right end of the axis. It's interesting to see that it seems like it does not overlap at all with any of the `(none), cpc, organic` distributions i.e. there is no case for our client where one of these channels in a country - contribute as much as `referral` contributes in the "worst for `referral`" country. So quite consistent and convincing picture of the marketing medium mix in terms of what works for the client.
 
-On the left side is the mean conv.rate for the free traffic for that country. On the right side is the mean conv.rate for the paid traffic for that country.
+Furthermore - seeing that `organic, (none)` which I consider free mediums - perform as well as `cpc` - makes me think that
 
-The visible spikes in each direction would indicate countries where one particular type of traffic is converting very well / better than the other counter-part.
+`cpc` performs better than `organic` in bringing (new) users - yet their revenue shares do not look vastly different.
 
-```{r}
-free_vs_paid_by_country |> 
-  select(country, medium, mean_conv_rate) |> 
-  # need to make one of the conv.rates negative in order
-  # to plot them from-center-to-the-sides like a pyramid
-  mutate(
-    mean_conv_rate = ifelse(
-      medium == "paid",
-      mean_conv_rate,
-      -mean_conv_rate
-    )
-  ) |> 
-  # remove not set as it's not actionable here
-  filter(country != "(not set)") |> 
-  # add the extra columns
-  left_join(countries_rank_by_low_free_sessions, join_by(country)) |> 
-  mutate(diff_conv_rates = mean_conv_rate_free - mean_conv_rate_paid) |> 
-  select(country, medium, mean_conv_rate, perc_sessions_free, diff_conv_rates) |>
-  mutate(country = fct_reorder(country, diff_conv_rates, max))
-```
+Quite obvious is how the distributions for `referral, (none), cpc` are close in terms of (new) users - but then a striking difference appears when switching the view to revenue. This means that:
 
-```{r}
-free_vs_paid_by_country |> 
-  select(country, medium, mean_conv_rate) |> 
-  # need to make one of the conv.rates negative in order
-  # to plot them from-center-to-the-sides like a pyramid
-  mutate(
-    mean_conv_rate = ifelse(
-      medium == "paid",
-      mean_conv_rate,
-      -mean_conv_rate
-    )
-  ) |> 
-  # remove not set as it's not actionable here
-  filter(country != "(not set)") |> 
-  # add the extra columns
-  left_join(countries_rank_by_low_free_sessions, join_by(country)) |>
-  
-  #filter(perc_sessions_free_rank <= 40) |> 
-  
-  mutate(diff_conv_rates = mean_conv_rate_free - mean_conv_rate_paid) |> 
-  select(country, medium, mean_conv_rate, diff_conv_rates) |>
-  mutate(country = fct_reorder(country, diff_conv_rates)) |>
+-   `referral` brings 50% of the users but 70% of the revenue
+-   `(none)` brings 25% of the users but 7% of the revenue
 
-  # order the countries by ther % free sessions
-  # the countries on the top have the highest % of free sessions overall
-  #mutate(country = fct_reorder(country, perc_sessions_free_rank)) |> 
-  # plot
-  ggplot(aes(x = mean_conv_rate, y = country, fill = medium)) + 
-  geom_col() +
-  scale_x_continuous(labels = ~ percent_format()(abs(.x))) +
-  facet_grid(~ medium, scales = "free_x")
-```
-
-```{r}
-free_vs_paid_by_country |> 
-  select(country, medium, mean_conv_rate) |> 
-  # need to make one of the conv.rates negative in order
-  # to plot them from-center-to-the-sides like a pyramid
-  mutate(
-    mean_conv_rate = ifelse(
-      medium == "paid",
-      mean_conv_rate,
-      -mean_conv_rate
-    )
-  ) |> 
-  # remove not set as it's not actionable here
-  filter(country != "(not set)") |> 
-  # add the extra columns
-  left_join(countries_rank_by_low_free_sessions, join_by(country)) |>
-  
-  #filter(perc_sessions_free_rank <= 40) |> 
-  
-  mutate(diff_conv_rates = mean_conv_rate_free - mean_conv_rate_paid) |> 
-  select(country, medium, mean_conv_rate, diff_conv_rates) |>
-  mutate(country = fct_reorder(country, diff_conv_rates)) |> 
-  ggplot(aes(y = country)) + 
-  geom_segment(aes(x = 0, xend = diff_conv_rates)) +
-  scale_x_continuous(
-    labels = label_percent(accuracy = 0.1),
-    expand = c(0, 0.001)
-  ) +
-  labs(
-    y = NULL
-  )
-```
+Hence, the client does not manage to monetise mediums equally i.e. people coming from `(none)` usually bring less money than people coming from `referral` . However - keeping in mind that this is a view from the `country_medium.csv` file which means that this is the converting session coming from the last non-direct medium. In other words - `referral` does monetise the incoming users better, however this is not the whole picture as the other mediums might be contributing in other parts of the customer journey on the way to conversion. So it will be interesting to compare this view to the view that will come out of the `conversion_paths.csv` file i.e. the more general holistic view on the customer journey.

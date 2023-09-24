@@ -48,30 +48,23 @@ The results from this model suggest that the last non-direct model from GA could
 
 For more details please see: [transition matrix](conversion_paths.qmd#transition-matrix-conclusions), [removal effects](conversion_paths.qmd#removal-effects) and [heuristic vs. markov](conversion_paths.qmd#heuristic-vs-markov).
 
-### Medium value comparisons
-
-```{r}
-country_medium_view_value_per_medium <- read_csv(
-  path_join(c(here(), data_dir, "country_medium_view_value_per_medium.csv"))
-)
-country_medium_view_value_per_medium
-```
+### 
 
 ## Countries view
 
-### High volume free traffic that converts well
+### Good converting free traffic {#good-converting-free-traffic}
 
 Finland, Norway, Ireland, Saudi Arabia, Thailand, Lithuania, Switzerland, Austria - these are good candidate countries for marketing investments because - while having *low amounts of paid traffic*, they do bring in *good amounts of free traffic* and they *convert this free traffic very well*.
 
 For more details please see [this section](country_medium.qmd#high-volume-free-traffic).
 
-### Good conversion rate and high value
+### Good conversion rate and high value {#good-conversion-rate-high-value}
 
 Countries that convert traffic and have high revenue per transaction are very valuable. Examples of such countries are Japan and New Zealand (amongst the best ones, for others see the section)
 
 For more details please see [this section](country.qmd#conv-rate-rev-per-transaction).
 
-### Market Penetration
+### Market Penetration {#potential-marketing-scaling}
 
 Looking at the data at an aggregated country level in terms of market penetration, making some high-level, **but bold**, assumptions about the current state and the marketing playbook used in certain European countries - it could be that by using the same marketing tactics as in countries like Italy and Spain - the client could potentially achieve higher market presence and therefore higher revenue in countries like France and Germany.
 
@@ -89,20 +82,16 @@ Putting these different views together - I compiled a list of potential countrie
 good_conv_low_free_traffic <- read_csv(
   path_join(c(here(), data_dir, "good_conv_low_free_traffic_candidates.csv"))
 )
-
 high_conv_rate_and_valuable <- read_csv(
   path_join(c(here(), data_dir, "high_conv_rate_and_valuable_candidates.csv"))
 )
-
 potential_mkt_scaling <- read_csv(
   path_join(c(here(), data_dir, "potential_mkt_scaling_candidates.csv"))
 )
-
 ```
 
 ```{r}
 #| label: final-recommendation-countries
-
 all_countries <- unique(
   c(
     good_conv_low_free_traffic$country,
@@ -125,3 +114,9 @@ datatable(final_recommendation_countries)
 Saudi Arabia, Austria and Netherlands are candidate countries that appear in 2 of the 3 views and hence could be a good starting point for scaling marketing investments.
 
 They are all countries where free traffic is already converting well while paid traffic is low - which means the client is likely not doing any paid marketing. So boosting marketing investments in these countries could likely mean also good returns. They are also countries with a high revenue per transaction and hence the customers are above-average-valuable.
+
+N.B. The columns from the table are linked to the above sections - for more details and what they mean see:
+
+-   `good_converting_low_free_traffic` is explained in (#good-converting-free-traffic)
+-   `good_conversion_and_high_value` is explained in (#good-conversion-rate-high-value)
+-   `potential_marketing_scaling` is explained in (#potential-marketing-scaling)

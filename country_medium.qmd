@@ -729,7 +729,7 @@ In order to estimate the average revenue per transaction for each medium - I wil
 ```{r}
 #| label: bootstrap-mean-revenue-per-transaction
 
-n_bootstrap_times <- 10
+n_bootstrap_times <- 10000
 
 bootstrap_means <- 
   medium_country |>

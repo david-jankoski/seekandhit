@@ -1,0 +1,14 @@
+---
+number-sections: false
+monofont: Fira Code Light
+---
+
+# Colophon
+
+This project would not be so easily made without the tireless work of many free-software developers. Many thanks for all your work.
+
+R Core Team (2023). *R: A Language and Environment for Statistical Computing*. R Foundation for Statistical Computing, Vienna, Austria. <https://www.R-project.org/>.
+
+[Quarto](https://quarto.org/) from Posit / RStudio.
+
+[github/juba](https://github.com/juba/bookup-html)'s great quarto extension `bookup-html`

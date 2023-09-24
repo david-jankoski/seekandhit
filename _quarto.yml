@@ -22,7 +22,7 @@ website:
           - conversion_paths.qmd
       - section: "Appendix"
         contents:
-          - other_ideas.qmd
+          - colophon.qmd
   page-footer:
     left: "This is quite a fine footer."
     right:

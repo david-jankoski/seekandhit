@@ -1,5 +1,0 @@
-# Other ideas
-
-From markovchain pkg - [meanNumVisits](https://cran.r-project.org/web/packages/markovchain/markovchain.pdf#page=40&zoom=auto,-66,464) function or
-
-Even though the result is a nice website format from Quarto - it would be nice to package everything with renv and Dockerfile (will try at least)

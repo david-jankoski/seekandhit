@@ -61,4 +61,4 @@ The individual sections that look at the different views of the data can be foun
 
 I tried to express there my thoughts and investigations into text and code to reflect my approach to this task.
 
-Some thoughts and ideas that did not fit anywhere above but were - in my opinion - worth keeping, can be found in the [Appendix](other_ideas.qmd#Other%20ideas) section.
+I hope you find it interesting and I look forward to discussing it with you. All the code for this project can be found [here](https://github.com/david-jankoski/seekandhit).

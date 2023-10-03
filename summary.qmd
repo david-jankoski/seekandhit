@@ -117,6 +117,6 @@ They are all countries where free traffic is already converting well while paid 
 
 N.B. The columns from the table are linked to the above sections - for more details and what they mean see:
 
--   `good_converting_low_free_traffic` is explained in (#good-converting-free-traffic)
--   `good_conversion_and_high_value` is explained in (#good-conversion-rate-high-value)
--   `potential_marketing_scaling` is explained in (#potential-marketing-scaling)
+-   `good_converting_low_free_traffic` is explained in [Good converting free traffic](#good-converting-free-traffic)
+-   `good_conversion_and_high_value` is explained in [Good conversion rate and high value](#good-conversion-rate-high-value)
+-   `potential_marketing_scaling` is explained in [Market Penetration](#potential-marketing-scaling)

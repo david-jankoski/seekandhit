@@ -5,7 +5,7 @@ monofont: Fira Code Light
 
 # Colophon
 
-This project would not be so easily made without the tireless work of many free-software developers. Many thanks for all your work.
+This project would not be possible without the tireless work of many free-software developers. Many thanks for all your work.
 
 R Core Team (2023). *R: A Language and Environment for Statistical Computing*. R Foundation for Statistical Computing, Vienna, Austria. <https://www.R-project.org/>.
 

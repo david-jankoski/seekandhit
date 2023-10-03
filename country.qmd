@@ -1,5 +1,5 @@
 ---
-echo: false
+echo: true
 code-fold: true
 monofont: Fira Code Light
 execute:
@@ -43,7 +43,6 @@ The source file contains data on `r n_countries_total` countries in total and e.
 
 ```{r}
 #| label: show-example-raw-data
-#| echo: true
 medium_country_raw |> 
   filter(country == "Croatia") |> 
   arrange(desc(revenue)) |> 
@@ -54,7 +53,6 @@ The data is on country / medium level so I would like to collapse it down to jus
 
 ```{r}
 #| label: aggregate-to-country-level
-#| echo: true
 by_country <- 
   medium_country_raw |> 
   group_by(country) |> 
@@ -92,7 +90,6 @@ I would pick `users, transactions, revenue` as most important metrics and look a
 
 ```{r}
 #| label: important-metrics-quantiles
-#| echo: true
 by_country |> 
   select(users, transactions, revenue) |> 
   map(quantile, probs = seq(0, 1, 0.05))
@@ -114,7 +111,6 @@ The potentially-to-be-removed countries seem to be indeed small countries.
 
 ```{r}
 #| label: show-low-volume-countries-1
-#| echo: true
 by_country |>
   filter(
     (revenue <= 20000) | (users <= 1000) | (transactions <= 100)
@@ -130,7 +126,6 @@ How many countries will be removed with this rule ? How much of the revenue do t
 
 ```{r}
 #| label: show-low-volume-countries-2
-#| echo: true
 by_country |> 
   mutate(
     too_low_volume = {
@@ -156,7 +151,6 @@ I would be removing 104 countries \~43% of the total number but half a percent i
 
 ```{r}
 #| label: remove-low-volume-countries
-#| echo: true
 by_country <- by_country |> 
   filter(
     (revenue > 20000) & (users > 1000) & (transactions > 100)
@@ -220,7 +214,6 @@ Next I would like to take a look at the main "drivers" in terms of all the main 
 
 ```{r}
 #| label: most-users-plot
-#| echo: true
 by_country |> 
   slice_max(order_by = users, n = 30) |> 
   mutate(country = fct_reorder(country, users)) |> 
@@ -240,7 +233,6 @@ by_country |>
 
 ```{r}
 #| label: most-new-users-plot
-#| echo: true
 by_country |> 
   slice_max(order_by = new_users, n = 30) |> 
   mutate(country = fct_reorder(country, new_users)) |> 
@@ -260,7 +252,6 @@ by_country |>
 
 ```{r}
 #| label: most-transactions-plot
-#| echo: true
 by_country |> 
   slice_max(order_by = transactions, n = 30) |> 
   mutate(country = fct_reorder(country, transactions)) |> 
@@ -280,7 +271,6 @@ by_country |>
 
 ```{r}
 #| label: most-revenue-plot
-#| echo: true
 by_country |> 
   slice_max(order_by = revenue, n = 30) |> 
   mutate(country = fct_reorder(country, revenue)) |> 
@@ -385,7 +375,6 @@ It would make sense to invest in marketing in these countries as the traffic is 
 
 ```{r}
 #| label: high-conv-rate-valuable-candidates-save
-#| echo: false
 high_conv_rate_and_valuable_candidates <- high_conv_rate_and_valuable |> 
   select(country) |>
   mutate(good_conversion_and_high_value = T)
@@ -463,7 +452,6 @@ More concretely i need to combine 3 datasets and calculate the additional metric
 
 ```{r}
 #| label: setup-market-penetration
-#| echo: true
 library("openintro")
 library("eurostat")
 
@@ -517,7 +505,6 @@ Not all countries got matched - the tourism data is only for EU but that would d
 
 ```{r}
 #| label: eu-market-penetration
-#| echo: true
 country_penetration |> 
   filter( !is.na(one_in_N_tourists_has_transacted) ) |> 
   select(
@@ -545,7 +532,6 @@ For example such pairs could be:
 
 ```{r}
 #| label: potential-mkt-scaling-candidates-save
-#| echo: false
 filename <- "potential_mkt_scaling_candidates.csv"
 
 potential_mkt_scaling <- tibble(
@@ -576,7 +562,6 @@ Recalibrating the numbers from Germany with this potential penetration we would 
 
 ```{r}
 #| label: germany-potential
-#| echo: true
 
 # numbers from table above
 current_revenue_germany   <- 12906843

@@ -42,6 +42,8 @@ While one of the main points is around keeping *profitability* no data on market
 
 Nevertheless, the data provided contained many interesting insights already - and besides that, I think it should not be too hard to also add this aspect to the existing analysis.
 
+For instance, having marketing spend data on (country, channel/medium) level would be helpful to derive important metrics like the channel's return on investment or the cost per acquisition (CPA). The latter coupled with the customer lifetime value (CLV) derives further into the CLV:CPA ratio which speaks about the profitability of the business. One important think to consider is the fact that CPA would depend on the type of attribution model used (which channel did acquire what portion of the customers) and as discussed in the further sections - this could be very different depending on the choice of model.
+
 # Data
 
 -   `medium_country.csv` data aggregated on country / medium level providing some high-level important metrics like \# sesssions, (new) users, transactions, revenue, bounce rate etc. This file is likely the format of the Google Analytics Acquisition Report.

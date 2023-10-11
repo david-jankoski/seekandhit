@@ -52,7 +52,6 @@ Are all conversions a single `1` or is there variety in the data ?
 
 ```{r}
 #| label: explore-conversions-1
-#| echo: false
 #| warning: false
 #| message: false
 conv_paths_raw |>
@@ -115,7 +114,6 @@ How does `value` look like ?
 
 ```{r}
 #| label: explore-values-4-a
-# 1
 summary(conv_paths$value)
 ```
 
@@ -230,7 +228,7 @@ What might be also interesting to look at is the distribution of path lengths an
 
 Maybe an idea would be to come up with some simple rules for buckets and see if these 2 differ
 
--   the bulk of the path lenghts distribution would be centeres around some value `L` e.g.
+-   the bulk of the path lenghts distribution would be centered around some value `L` e.g.
 -   however - perhaps the bulk of the *value* is brought by another bucket e.g. `L + 10` i.e. the bulk of the conversions are around `L` but they are lower value conversions than bucket `L + 10`
 
 These are some of the questions I expect to perhaps show some interesting things.
@@ -315,7 +313,7 @@ path_lengths |>
 
 \~95% of the value is already brought by path lengths of `<= 5` !
 
-In any case - this view could be useful in some marketing optimisations i.e. if we would be able to determine the already-existing path length of a customer - then we could increase or decrease or marketing spend in order to nudge the customer or to save some costs (if we would be able to determing the customers whose journey already overstepped e.g. path length of 6 then we could chose to save these costs or re-invest them in remarketing to customers who are still at step 2 or 3 - as we know that small % of the value comes past this threshold).
+In any case - this view could be useful in some marketing optimisations i.e. if we would be able to determine the already-existing path length of a customer - then we could increase or decrease our marketing spend in order to nudge the customer or to save some costs (if we would be able to determine the customers whose journey already overstepped e.g. path length of 6 then we could chose to save these costs or re-invest them in remarketing to customers who are still at step 2 or 3 - as we know that small % of the value comes past this threshold).
 
 ## Most common first medium
 
@@ -351,7 +349,9 @@ At this point I am content with the checks, cleaning and format of the file.
 
 # Markov model
 
-I would like to fit a order-1 Markov Model to the conversion paths.
+Given such data with conversion paths of customers, we can use it to build a network where each node is a marketing medium and each edge is the probability of going in that direction i.e. having a touchpoint with the node/medium at the start of the edge, followed by a node/medium at the end of the edge. The probabilities of the edges or transitions are estimated from the data.
+
+I would like to fit a order-1 Markov Model to the conversion paths, which would estimate the 1-step probabilities of transitioning through the marketing mediums network.
 
 ```{r}
 #| label: markov-model-1
@@ -446,11 +446,10 @@ transition_matrix |>
 
 As suspected - quite some interesting and different views on customer conversions from this side.
 
--   To end up in the `(conversion)` state, the highest transition probability 82.6% is coming from `(none)`. This means that - given that you had a direct click (or visit coming in directly by typing the website) - then the most likely thing that you will do next is to actually convert
-    -   Compare this with 68.8% coming from `referral` - this means that if your last click was `referral` then you h
-        -   this is in contrast to the country/medium view where `referral` was always dominating the shares
+-   To end up in the `(conversion)` state, the highest transition probability 82.6% is coming from `(none)/direct`. This means that - given that you had a direct click (or visit coming in directly by typing the website) - then the most likely thing that you will do next is to actually convert
+    -   Compare this with 68.8% coming from `referral` which seems significantly less and quite in contrast to the country/medium view where `referral` was always dominating the shares
     -   to restate it bit differently
-        -   there is a 1 in 1.21 chance that you will convert - if your last click was `direct`.
+        -   there is a 1 in 1.21 chance that you will convert - if your last click was `(none)/direct`.
         -   there is a 1 in 1.45 chance that you will convert - if your last click was `referral`
         -   so having a `direct` click increases your chances by 20% to convert
 -   from an `organic` state - it's more likely that the path continues to a `cpc` or `(none)` than to a `(conversion)`

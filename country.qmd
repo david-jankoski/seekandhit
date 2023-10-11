@@ -340,10 +340,13 @@ high_conv_rate_and_valuable <- by_country |>
     },
     ecommerce_conversion_rate = percent_format(accuracy = 0.01,)(ecommerce_conversion_rate),
     revenue_per_transaction = as.integer(revenue_per_transaction),
-    # country has better ecomm.conv.rate than 50% of the others
+    
+    # --> country has better ecomm.conv.rate than 50% of the others -------
     is_top_converting_country = percent_rank(desc(ecommerce_conversion_rate)) <= 0.5,
-    # country has above average revenue per transaction
+    
+    # --> country has above average revenue per transaction -------
     is_rev_per_trans_higher_than_avg = diff_to_mean_revenue_per_transaction > 0
+
   ) |> 
   select(
     country,
@@ -399,10 +402,13 @@ low_conv_rate_high_traffic <- by_country |>
     },
     ecommerce_conversion_rate = percent_format(accuracy = 0.01,)(ecommerce_conversion_rate),
     revenue_per_transaction = as.integer(revenue_per_transaction),
-    # country has better ecomm.conv.rate than 50% of the others
+    
+    # --> country is in the worst 25% w.r.t. ecomm conv.rate -------
     is_bottom_converting_country = percent_rank(desc(ecommerce_conversion_rate)) >= 0.75,
-    # country has above average revenue per transaction
+    
+    # --> country has above average revenue per transaction -------
     is_rev_per_trans_higher_than_avg = diff_to_mean_revenue_per_transaction > 0
+
   ) |> 
   select(
     country,

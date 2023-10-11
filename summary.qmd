@@ -120,3 +120,26 @@ N.B. The columns from the table are linked to the above sections - for more deta
 -   `good_converting_low_free_traffic` is explained in [Good converting free traffic](#good-converting-free-traffic)
 -   `good_conversion_and_high_value` is explained in [Good conversion rate and high value](#good-conversion-rate-high-value)
 -   `potential_marketing_scaling` is explained in [Market Penetration](#potential-marketing-scaling)
+
+## Considerations
+
+### Competitive new markets ?
+
+Additional insights and considerations could be to what the main competitors are doing in terms of marketing in these countries e.g. are they investing / overly present in specific mediums/channels ? This could be valuable info as to the level of investment in order to be competitive.
+
+Depending on the situation - if it is a "tough" marketing where the main competitors are investing aggresively into marketing - then it's a hint on the level of investment our client needs to make (or a hint towards readjusting the expectations of growth in these markets).
+
+### Geo/Country experiments
+
+One of the potential ways how to evaluate the effectiveness of such new country expansion initiatives would be to conduct Geoexperiments. The general idea would be to select a set of countries/markets with similar characteristics, that behave similarly and where the current marketing efforts are comparable. A *treatment* country would be the one where the client scales up the marketing investments while the rest would be *control* countries.
+
+The main metric could be either \# of new visitors or, depending on the size of the effect we expect, could be even more lower-funnel like \# of new customers.
+
+The control set of countries would be used to estimate the *counterfactual* - what would have happened in the treatment country, had we not done the extra marketing initiative. Comparing the actual, observed metrics to the estimated, counterfactual would give us an estimate of the causal impact the marketing initiative had.
+
+### Potential improvements and ideas for other channels
+
+Some potential ideas to boost the lower performing channels/mediums
+
+-   optimise keywords in order to grow `organic` - investigate what do people search for when searching for short-distance travel and optimise the website for this intent
+-   analyse and do customer segmentation / personalisation on the email list in order to provide more personal/targeted information and increase engagement

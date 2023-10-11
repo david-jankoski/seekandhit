@@ -627,7 +627,7 @@ With the new labeling, re-group and summarise for the metrics of interest.
 #| label: high-vol-free-traffic-setup
 #| message: false
 free_vs_paid_by_country <- medium_country |> 
-  # take top 100 countries w.r.t revenue
+  # take top 150 countries w.r.t revenue
   semi_join(
     by_country |> slice_max(order_by = revenue_country, n = 150),
     join_by(country)
@@ -650,18 +650,23 @@ free_vs_paid_by_country <- medium_country |>
   mutate(perc_sessions = sessions / sum(sessions)) |> 
   ungroup()
 
-datatable(free_vs_paid_by_country)
+free_vs_paid_by_country |>
+  mutate(
+    across(
+      c(mean_conv_rate, perc_sessions),
+      percent_format(accuracy = 0.01)
+    )
+  ) |> 
+  datatable()
 ```
-
-> But by looking at 'share' it could still be that some countries have just very high free traffic and also still high paid traffic (but relatively low). I think good to pick countries with a good amount of Free traffic (so indicates traction) + an absolute low amount paid traffic (so then you know for sure it's not a focus country from an investment perspective yet) and then + a high free conversion-rate. And then clearly rank the most interesting countries from this and point out a few in the top as a conclusion of potential interesting ones.
 
 In order to pinpoint the interesting countries - I need to make some choices as cutoff points
 
--   i want a good amout of free traffic -\> so it indicates traction
-    -   at least 500 sessions per day in the year
--   i want a very small amount of paid traffic -\> so we know for sure that this is definitely not a focus country for the client
-    -   less than 200 sessions per day in the year
--   and i want a high average conversion rate of the free traffic
+-   i want a good amout of free traffic so it indicates **traction**
+    -   i will take only pairs with at least 500 sessions per day in the year
+-   i want a very small amount of paid traffic so we know for sure that this is definitely **not a focus** country for the client
+    -   i will consider small amount if it is less than 200 sessions per day in the year
+-   and i want a **high** average conversion rate of the **free** traffic
 
 ```{r}
 #| label: good-converting-low-tree-trafic
@@ -714,6 +719,12 @@ write_csv(good_conv_low_free_traffic, path_join(c(here(), data_dir, filename)))
 ```
 
 # Some other things I looked at
+
+The following section contains some extra parts that I looked at but did not show or add anything more to the general narrative. Feel free to skim through them or completely skip over them. I decided to include them at the end of this section because they still serve as support for some facts:
+
+-   `referral` brings in the most valuable customers, followed by `organic` - which is ahead of `cpc` and `(none)/direct`
+-   `organic` brings less (new) users on average than `cpc / direct` but they are more valuable on average
+-   
 
 ## Revenue per transaction for each medium
 
